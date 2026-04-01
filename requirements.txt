@@ -1,0 +1,5 @@
+yfinance==0.2.37
+requests==2.31.0
+azure-eventhub==5.15.1
+pytest==7.4.0
+databricks-cli==0.18.0

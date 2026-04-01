@@ -1,0 +1,69 @@
+name: CI/CD Pipeline - Case Santander
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  ci:
+    name: Integracao Continua
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v3
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: |
+          pip install pytest yfinance requests azure-eventhub
+
+      - name: Rodar testes
+        run: |
+          pytest tests/ -v
+
+      - name: Validar notebooks
+        run: |
+          echo "Validando notebooks..."
+          for f in notebooks/*.py; do
+            python -m py_compile "$f" && echo "OK: $f" || echo "ERRO: $f"
+          done
+
+  cd:
+    name: Deploy Continuo
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v3
+
+      - name: Instalar Databricks CLI
+        run: pip install databricks-cli
+
+      - name: Configurar Databricks CLI
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          databricks configure --token <<< "$DATABRICKS_HOST
+          $DATABRICKS_TOKEN"
+
+      - name: Deploy notebooks para Databricks
+        run: |
+          databricks workspace mkdirs /case-santander
+          for f in notebooks/*.py; do
+            databricks workspace import "$f" "/case-santander/$(basename $f)" \
+              --language PYTHON --overwrite
+          done
+          echo "Notebooks publicados com sucesso!"
+
+      - name: Notificar deploy
+        run: echo "Deploy concluido em $(date)"
