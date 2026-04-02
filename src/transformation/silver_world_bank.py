@@ -33,6 +33,7 @@ def transformar_world_bank(spark: SparkSession, storage_account: str) -> int:
     df_silver.write \
         .format("delta") \
         .mode("overwrite") \
+        .option("mergeSchema", "true") \
         .partitionBy("indicador", "ano") \
         .save(silver_path)
 
