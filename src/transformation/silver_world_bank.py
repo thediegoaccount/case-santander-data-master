@@ -10,11 +10,8 @@ def transformar_world_bank(spark: SparkSession, storage_account: str) -> int:
     """
     Le dados brutos do World Bank do Bronze,
     aplica transformacoes e grava no Silver em Delta Lake.
-
-    Returns: total de registros gravados
     """
-    data_hoje = datetime.now().strftime("%Y-%m-%d")
-
+    data_hoje   = datetime.now().strftime("%Y-%m-%d")
     bronze_path = f"abfss://bronze@{storage_account}.dfs.core.windows.net/world_bank/"
     silver_path = f"abfss://silver@{storage_account}.dfs.core.windows.net/world_bank/"
 
@@ -22,19 +19,22 @@ def transformar_world_bank(spark: SparkSession, storage_account: str) -> int:
 
     df = spark.read.parquet(bronze_path)
 
+    # Debug — ver schema e amostra
+    print("Schema Bronze:")
+    df.printSchema()
+    print("Amostra:")
+    df.show(3)
+
     df_silver = df \
-        .withColumn("data",  F.to_date(F.concat(F.col("data"), F.lit("-01-01")), "yyyy-MM-dd")) \
-        .withColumn("ano",   F.year("data")) \
-        .withColumn("valor", F.round("valor", 4)) \
+        .withColumn("ano", F.col("data").cast("integer")) \
         .withColumn("data_processamento", F.lit(data_hoje)) \
         .filter(F.col("valor").isNotNull()) \
-        .filter(F.col("data").isNotNull())
+        .filter(F.col("ano").isNotNull())
 
     df_silver.write \
         .format("delta") \
         .mode("overwrite") \
         .option("mergeSchema", "true") \
-        .partitionBy("indicador", "ano") \
         .save(silver_path)
 
     total = df_silver.count()

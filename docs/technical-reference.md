@@ -7,9 +7,10 @@
 3. [Referência de Funções](#3-referência-de-funções)
 4. [Dicionário de Dados](#4-dicionário-de-dados)
 5. [Algoritmos e Fórmulas](#5-algoritmos-e-fórmulas)
-6. [Configuração e Dependências](#6-configuração-e-dependências)
-7. [Guia de Desenvolvimento](#7-guia-de-desenvolvimento)
-8. [Monitoramento e Alertas](#8-monitoramento-e-alertas)
+6. [APIs Externas Utilizadas](#6-apis-externas-utilizadas)
+7. [Configuração e Dependências](#7-configuração-e-dependências)
+8. [Guia de Desenvolvimento](#8-guia-de-desenvolvimento)
+9. [Monitoramento e Alertas](#9-monitoramento-e-alertas)
 
 ---
 
@@ -531,7 +532,392 @@ Alertas:
 
 ---
 
-## 6. Configuração e Dependências
+## 6. APIs Externas Utilizadas
+
+### 6.1 Yahoo Finance — `yfinance`
+
+**Tipo:** Biblioteca Python (wrapper sobre a API não-oficial do Yahoo Finance)  
+**Autenticação:** Nenhuma (pública, sem API key)  
+**Arquivo:** [src/ingestion/yahoo_finance.py](../src/ingestion/yahoo_finance.py)
+
+#### Como é utilizada
+
+```python
+import yfinance as yf
+
+ticker = yf.Ticker("PETR4.SA")
+df = ticker.history(period="2y")
+```
+
+#### Parâmetros utilizados
+
+| Parâmetro | Valor | Descrição |
+|---|---|---|
+| `period` | `"2y"` | Histórico dos últimos 2 anos |
+| Ticker format | `"<CÓDIGO>.SA"` | Sufixo `.SA` identifica ações da B3 (Bovespa) |
+
+#### Ações monitoradas
+
+| Ticker | Empresa | Setor |
+|---|---|---|
+| `PETR4.SA` | Petrobras | Energia |
+| `VALE3.SA` | Vale | Mineração |
+| `ITUB4.SA` | Itaú Unibanco | Financeiro |
+| `BBDC4.SA` | Bradesco | Financeiro |
+| `ABEV3.SA` | Ambev | Consumo |
+| `MGLU3.SA` | Magazine Luiza | Varejo |
+| `WEGE3.SA` | WEG | Industrial |
+| `BBAS3.SA` | Banco do Brasil | Financeiro |
+| `SANB11.SA` | Santander BR | Financeiro |
+
+#### Campos retornados por `ticker.history()`
+
+| Campo | Tipo Python | Descrição |
+|---|---|---|
+| `Date` (index) | `DatetimeIndex` | Data do pregão |
+| `Open` | `float` | Preço de abertura (BRL) |
+| `High` | `float` | Preço máximo do dia (BRL) |
+| `Low` | `float` | Preço mínimo do dia (BRL) |
+| `Close` | `float` | Preço de fechamento (BRL) |
+| `Volume` | `int` | Volume de ações negociadas |
+| `Dividends` | `float` | Dividendos pagos no dia |
+| `Stock Splits` | `float` | Desdobramentos de ações |
+
+> Os campos `Dividends` e `Stock Splits` são descartados na transformação Silver.
+
+#### Tratamento de erros
+
+Cada ação é extraída individualmente em um `try/except`. Falha em uma ação não interrompe as demais — o erro é logado e o loop continua.
+
+---
+
+### 6.2 Banco Central do Brasil (BCB) — API SGS
+
+**Tipo:** REST API pública  
+**Autenticação:** Nenhuma (pública, sem API key)  
+**Base URL:** `https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados`  
+**Arquivo:** [src/ingestion/bcb.py](../src/ingestion/bcb.py)
+
+#### Endpoints utilizados
+
+##### Selic — Taxa de Juros (diária)
+
+```
+GET https://api.bcb.gov.br/dados/serie/bcdata.sgs.11/dados
+    ?formato=json
+    &dataInicial=01/04/2021
+    &dataFinal=01/04/2026
+```
+
+| Parâmetro | Valor | Descrição |
+|---|---|---|
+| Código SGS | `11` | Série histórica da taxa Selic |
+| `formato` | `json` | Formato da resposta |
+| `dataInicial` | `01/04/2021` | Início do período (dd/MM/yyyy) |
+| `dataFinal` | `01/04/2026` | Fim do período (dd/MM/yyyy) |
+
+**Resposta (exemplo):**
+```json
+[
+  { "data": "01/04/2021", "valor": "2.75" },
+  { "data": "02/04/2021", "valor": "2.75" }
+]
+```
+
+##### Câmbio USD/BRL (diário)
+
+```
+GET https://api.bcb.gov.br/dados/serie/bcdata.sgs.1/dados
+    ?formato=json
+    &dataInicial=01/04/2021
+    &dataFinal=01/04/2026
+```
+
+| Parâmetro | Valor | Descrição |
+|---|---|---|
+| Código SGS | `1` | Taxa de câmbio dólar/real (PTAX) |
+| `formato` | `json` | Formato da resposta |
+
+**Resposta (exemplo):**
+```json
+[
+  { "data": "01/04/2021", "valor": "5.6980" },
+  { "data": "05/04/2021", "valor": "5.7030" }
+]
+```
+
+##### IPCA — Inflação (mensal)
+
+```
+GET https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados
+    ?formato=json
+```
+
+| Parâmetro | Valor | Descrição |
+|---|---|---|
+| Código SGS | `433` | Índice de Preços ao Consumidor Amplo |
+| `formato` | `json` | Formato da resposta |
+| Período | Sem filtro | Retorna toda a série histórica disponível |
+
+**Resposta (exemplo):**
+```json
+[
+  { "data": "01/2021", "valor": "0.25" },
+  { "data": "02/2021", "valor": "0.86" }
+]
+```
+
+#### Campos comuns após normalização
+
+| Campo original | Campo normalizado | Tipo | Descrição |
+|---|---|---|---|
+| `data` | `data` | `str` (dd/MM/yyyy) | Data da observação |
+| `valor` | `valor` | `float` | Valor do indicador |
+| — | `indicador` | `str` | `selic`, `cambio_usd_brl` ou `ipca` |
+| — | `data_extracao` | `str` | Data de execução do job |
+
+#### Configurações de requisição
+
+```python
+requests.get(url, timeout=10)  # timeout de 10 segundos por chamada
+```
+
+---
+
+### 6.3 World Bank — Data API v2
+
+**Tipo:** REST API pública  
+**Autenticação:** Nenhuma (pública, sem API key)  
+**Base URL:** `https://api.worldbank.org/v2/country/BR/indicator/{indicator}`  
+**Arquivo:** [src/ingestion/world_bank.py](../src/ingestion/world_bank.py)
+
+#### Endpoints utilizados
+
+##### PIB — Crescimento anual do GDP
+
+```
+GET https://api.worldbank.org/v2/country/BR/indicator/NY.GDP.MKTP.KD.ZG
+    ?format=json
+    &per_page=30
+```
+
+| Parâmetro | Valor | Descrição |
+|---|---|---|
+| Indicador | `NY.GDP.MKTP.KD.ZG` | GDP growth (annual %) |
+| `format` | `json` | Formato da resposta |
+| `per_page` | `30` | Últimos 30 anos de dados |
+
+##### Desemprego — Taxa anual
+
+```
+GET https://api.worldbank.org/v2/country/BR/indicator/SL.UEM.TOTL.ZS
+    ?format=json
+    &per_page=30
+```
+
+| Parâmetro | Valor | Descrição |
+|---|---|---|
+| Indicador | `SL.UEM.TOTL.ZS` | Unemployment, total (% of total labor force) |
+| `format` | `json` | Formato da resposta |
+| `per_page` | `30` | Últimos 30 anos de dados |
+
+#### Estrutura da resposta
+
+A API retorna uma lista com dois elementos:
+
+```json
+[
+  { "page": 1, "pages": 1, "per_page": 30, "total": 30 },
+  [
+    { "date": "2023", "value": 2.9, "country": { "id": "BR", "value": "Brazil" } },
+    { "date": "2022", "value": 3.0, "country": { "id": "BR", "value": "Brazil" } }
+  ]
+]
+```
+
+O código acessa `response.json()[1]` para obter o array de registros. Registros com `value: null` são descartados na extração.
+
+#### Campos extraídos
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `date` | `str` (yyyy) | Ano de referência |
+| `value` | `float` | Valor do indicador (percentual) |
+| — | `indicador` | `pib_anual` ou `desemprego` |
+| — | `data_extracao` | Data de execução |
+| — | `fonte` | `"world_bank"` |
+
+#### Configurações de requisição
+
+```python
+requests.get(url, timeout=10)  # timeout de 10 segundos por chamada
+```
+
+---
+
+### 6.4 Azure Event Hub — Apache Kafka Protocol
+
+**Tipo:** Streaming (mensageria compatível com Kafka)  
+**Autenticação:** Connection String (SASL/SSL) armazenada no Key Vault  
+**Secret Key Vault:** `eventhub-connection-string`  
+**Arquivo:** [src/streaming/\_\_init\_\_.py](../src/streaming/__init__.py)
+
+#### Configuração do Consumer (Kafka)
+
+```python
+from azure.eventhub import EventHubConsumerClient
+
+client = EventHubConsumerClient.from_connection_string(
+    conn_str=eventhub_connection_string,
+    consumer_group="$Default",
+    eventhub_name="transacoes-financeiras"
+)
+```
+
+#### Tópico / Event Hub
+
+| Propriedade | Valor |
+|---|---|
+| Namespace | `evhcasesantander` |
+| Event Hub | `transacoes-financeiras` |
+| Consumer Group | `$Default` |
+| Protocolo | AMQP / Kafka compatível |
+
+#### Schema das mensagens (JSON)
+
+```json
+{
+  "orderId":    "string — UUID da ordem",
+  "customerId": "string — ID do cliente",
+  "ticker":     "string — código da ação",
+  "quantity":   "int    — quantidade de ações",
+  "price":      "float  — preço unitário",
+  "value":      "float  — valor total",
+  "timestamp":  "string — ISO 8601"
+}
+```
+
+#### Saída no Bronze
+
+Os eventos são gravados em:
+```
+abfss://bronze@stcasesantander.dfs.core.windows.net/kafka/data={data_hoje}/
+```
+
+Volume estimado: ~200 eventos por lote de ingestão.
+
+---
+
+### 6.5 Azure Key Vault — Secrets API
+
+**Tipo:** Azure SDK via `dbutils.secrets`  
+**Autenticação:** Databricks Secret Scope vinculado ao Key Vault  
+**Arquivo:** [src/config/settings.py](../src/config/settings.py)
+
+#### Como é utilizado
+
+```python
+def get_credentials(dbutils):
+    return {
+        "client_id":       dbutils.secrets.get(scope="kv-case-santander", key="client-id"),
+        "tenant_id":       dbutils.secrets.get(scope="kv-case-santander", key="tenant-id"),
+        "client_secret":   dbutils.secrets.get(scope="kv-case-santander", key="client-secret"),
+        "storage_account": dbutils.secrets.get(scope="kv-case-santander", key="storage-account"),
+        "sql_conn":        dbutils.secrets.get(scope="kv-case-santander", key="sql-connection-string"),
+        "kaggle_username": dbutils.secrets.get(scope="kv-case-santander", key="kaggle-username"),
+        "kaggle_key":      dbutils.secrets.get(scope="kv-case-santander", key="kaggle-key"),
+    }
+```
+
+#### Segredos registrados
+
+| Key no Key Vault | Usado em | Descrição |
+|---|---|---|
+| `client-id` | `configure_adls()` | App ID do Service Principal |
+| `tenant-id` | `configure_adls()` | Azure AD Tenant ID |
+| `client-secret` | `configure_adls()` | Credencial do Service Principal |
+| `storage-account` | `get_paths()` | Nome da conta ADLS Gen2 |
+| `eventhub-connection-string` | Streaming consumer | Conexão Event Hub |
+| `sql-connection-string` | Carga SQL | Conexão Azure SQL Database |
+| `kaggle-username` | Ingestão clientes | Autenticação Kaggle API |
+| `kaggle-key` | Ingestão clientes | Chave Kaggle API |
+
+> Nenhum segredo é exposto em código ou variável de ambiente. Todos os valores são lidos em tempo de execução via `dbutils.secrets`.
+
+---
+
+### 6.6 Azure ADLS Gen2 — OAuth2 / Service Principal
+
+**Tipo:** Protocolo de autenticação (não é uma API de dados)  
+**Autenticação:** OAuth2 Client Credentials (Service Principal)  
+**Arquivo:** [src/config/settings.py](../src/config/settings.py)
+
+#### Configuração na SparkSession
+
+```python
+def configure_adls(spark, storage_account, client_id, tenant_id, client_secret):
+    spark.conf.set(
+        f"fs.azure.account.auth.type.{storage_account}.dfs.core.windows.net",
+        "OAuth"
+    )
+    spark.conf.set(
+        f"fs.azure.account.oauth.provider.type.{storage_account}.dfs.core.windows.net",
+        "org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider"
+    )
+    spark.conf.set(
+        f"fs.azure.account.oauth2.client.id.{storage_account}.dfs.core.windows.net",
+        client_id
+    )
+    spark.conf.set(
+        f"fs.azure.account.oauth2.client.secret.{storage_account}.dfs.core.windows.net",
+        client_secret
+    )
+    spark.conf.set(
+        f"fs.azure.account.oauth2.client.endpoint.{storage_account}.dfs.core.windows.net",
+        f"https://login.microsoftonline.com/{tenant_id}/oauth2/token"
+    )
+```
+
+#### Token endpoint
+
+```
+POST https://login.microsoftonline.com/{tenant_id}/oauth2/token
+```
+
+| Parâmetro | Valor |
+|---|---|
+| `grant_type` | `client_credentials` |
+| `client_id` | ID do Service Principal |
+| `client_secret` | Segredo do Service Principal |
+| `resource` | `https://storage.azure.com/` |
+
+O Hadoop ABFS driver gerencia o ciclo de vida do token (obtenção, cache e renovação) automaticamente a partir da configuração acima.
+
+#### Permissão necessária no ADLS
+
+O Service Principal deve ter a role **Storage Blob Data Contributor** no storage account `stcasesantander`.
+
+---
+
+### Resumo das APIs
+
+| API | Tipo | Auth | Volume | Frequência |
+|---|---|---|---|---|
+| Yahoo Finance (`yfinance`) | Biblioteca Python | Nenhuma | ~445 registros/ação | Diária |
+| BCB SGS — Selic (código 11) | REST GET | Nenhuma | ~1.300 registros | Diária |
+| BCB SGS — Câmbio (código 1) | REST GET | Nenhuma | ~1.300 registros | Diária |
+| BCB SGS — IPCA (código 433) | REST GET | Nenhuma | ~467 registros | Mensal |
+| World Bank — PIB | REST GET | Nenhuma | ~30 registros | Anual |
+| World Bank — Desemprego | REST GET | Nenhuma | ~29 registros | Anual |
+| Azure Event Hub (Kafka) | Streaming AMQP | Connection String | ~200 eventos/lote | Tempo real |
+| Azure Key Vault | SDK Databricks | Secret Scope | — | Por execução |
+| Azure ADLS Gen2 | OAuth2 ABFS | Service Principal | — | Por execução |
+
+---
+
+## 7. Configuração e Dependências
+
+
 
 ### Variáveis de Configuração (`config/config.py`)
 
@@ -572,7 +958,7 @@ pytest>=7.4.0              # Framework de testes
 
 ---
 
-## 7. Guia de Desenvolvimento
+## 8. Guia de Desenvolvimento
 
 ### Setup Local
 
@@ -637,7 +1023,7 @@ logger.error(f"[ERRO] Falha ao processar {source}: {e}")
 
 ---
 
-## 8. Monitoramento e Alertas
+## 9. Monitoramento e Alertas
 
 ### Tabelas Monitoradas
 
