@@ -1,0 +1,50 @@
+"""
+Job: Transformacao Silver
+Responsavel pela transformacao Bronze -> Silver
+para todas as fontes de dados.
+
+Execucao:
+    python jobs/job_silver.py
+
+Ou via Databricks Workflow:
+    Task: t2_silver
+"""
+from databricks.connect import DatabricksSession
+from databricks.sdk.runtime import dbutils
+from datetime import datetime
+import sys
+import os
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from src.config.settings import configure_adls
+from src.transformation.silver_acoes import transformar_acoes
+from src.transformation.silver_bcb import transformar_bcb
+from src.transformation.silver_world_bank import transformar_world_bank
+
+
+def main():
+    inicio = datetime.now()
+    print(f"=== JOB SILVER INICIADO: {inicio} ===")
+
+    spark = DatabricksSession.builder.getOrCreate()
+
+    client_id       = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
+    tenant_id       = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
+    client_secret   = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
+    storage_account = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
+
+    configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
+
+    total_acoes = transformar_acoes(spark, storage_account)
+    total_bcb   = transformar_bcb(spark, storage_account)
+    total_wb    = transformar_world_bank(spark, storage_account)
+
+    fim = datetime.now()
+    duracao = (fim - inicio).total_seconds()
+
+    print(f"\n=== JOB SILVER CONCLUIDO ===")
+    print(f"Acoes:      {total_acoes} registros")
+    print(f"BCB:        {total_bcb} registros")
+    print(f"World Bank: {total_wb} registros")
+    print(f"Duracao:    {duracao:.2f}s")
