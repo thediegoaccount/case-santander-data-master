@@ -39,5 +39,4 @@ def main():
     print(f"Duracao:    {(fim - inicio).total_seconds():.2f}s")
 
 
-if __name__ == "__main__":
-    main()
+main()
