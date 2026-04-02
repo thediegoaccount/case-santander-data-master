@@ -1,9 +1,5 @@
 """
 Job: Unity Catalog — Bronze
-Registra todas as tabelas Bronze no Unity Catalog.
-
-Ou via Databricks Workflow:
-    Task: t0_unity_catalog_bronze
 """
 import sys
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
@@ -19,18 +15,15 @@ def main():
 
     spark = DatabricksSession.builder.getOrCreate()
 
-    # Credenciais via Key Vault
     storage_account = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
 
-    # Habilitar mergeSchema globalmente
     spark.sql("SET spark.databricks.delta.schema.autoMerge.enabled = true")
 
-    # Criar catálogo e schemas
-    spark.sql("CREATE CATALOG IF NOT EXISTS case_santander")
+    # Schemas já existem — apenas garante
     spark.sql("CREATE SCHEMA IF NOT EXISTS case_santander.bronze")
     spark.sql("CREATE SCHEMA IF NOT EXISTS case_santander.silver")
     spark.sql("CREATE SCHEMA IF NOT EXISTS case_santander.gold")
-    print("✅ Catálogo e schemas criados!")
+    print("✅ Schemas verificados!")
 
     # Registrar tabelas Bronze
     tabelas_bronze = {
