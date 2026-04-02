@@ -61,6 +61,7 @@ def transformar_acoes(spark: SparkSession, storage_account: str) -> int:
     df_silver.write \
         .format("delta") \
         .mode("overwrite") \
+        .option("mergeSchema", "true") \
         .partitionBy("ano", "mes") \
         .save(silver_path)
 
