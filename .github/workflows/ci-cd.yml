@@ -2,7 +2,7 @@ name: CI/CD Pipeline - Case Santander
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
     branches: [ main ]
 
@@ -10,7 +10,6 @@ jobs:
   ci:
     name: Integracao Continua
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout codigo
         uses: actions/checkout@v3
@@ -21,12 +20,10 @@ jobs:
           python-version: "3.11"
 
       - name: Instalar dependencias
-        run: |
-          pip install pytest yfinance requests azure-eventhub
+        run: pip install pytest yfinance requests azure-eventhub
 
       - name: Rodar testes
-        run: |
-          pytest tests/ -v
+        run: pytest tests/ -v
 
       - name: Validar notebooks
         run: |
@@ -35,12 +32,12 @@ jobs:
             python -m py_compile "$f" && echo "OK: $f" || echo "ERRO: $f"
           done
 
-  cd:
-    name: Deploy Continuo
-    runs-on: ubuntu-latest
+  deploy-dev:
+    name: Deploy Development
     needs: ci
-    if: github.ref == 'refs/heads/main'
-
+    runs-on: ubuntu-latest
+    environment: dev
+    if: github.ref == 'refs/heads/develop'
     steps:
       - name: Checkout codigo
         uses: actions/checkout@v3
@@ -48,22 +45,76 @@ jobs:
       - name: Instalar Databricks CLI
         run: pip install databricks-cli
 
-      - name: Configurar Databricks CLI
+      - name: Deploy Dev
         env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HOST:  ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          DEPLOY_PATH:      ${{ secrets.DEPLOY_PATH }}
         run: |
           databricks configure --token <<< "$DATABRICKS_HOST
           $DATABRICKS_TOKEN"
-
-      - name: Deploy notebooks para Databricks
-        run: |
-          databricks workspace mkdirs /case-santander
+          databricks workspace mkdirs $DEPLOY_PATH
           for f in notebooks/*.py; do
-            databricks workspace import "$f" "/case-santander/$(basename $f)" \
+            databricks workspace import "$f" \
+              "$DEPLOY_PATH/$(basename $f)" \
               --language PYTHON --overwrite
           done
-          echo "Notebooks publicados com sucesso!"
+          echo "Deploy Dev concluido em $DEPLOY_PATH"
 
-      - name: Notificar deploy
-        run: echo "Deploy concluido em $(date)"
+  deploy-hk:
+    name: Deploy HK
+    needs: deploy-dev
+    runs-on: ubuntu-latest
+    environment: hk
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v3
+
+      - name: Instalar Databricks CLI
+        run: pip install databricks-cli
+
+      - name: Deploy HK
+        env:
+          DATABRICKS_HOST:  ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          DEPLOY_PATH:      ${{ secrets.DEPLOY_PATH }}
+        run: |
+          databricks configure --token <<< "$DATABRICKS_HOST
+          $DATABRICKS_TOKEN"
+          databricks workspace mkdirs $DEPLOY_PATH
+          for f in notebooks/*.py; do
+            databricks workspace import "$f" \
+              "$DEPLOY_PATH/$(basename $f)" \
+              --language PYTHON --overwrite
+          done
+          echo "Deploy HK concluido em $DEPLOY_PATH"
+
+  deploy-prod:
+    name: Deploy Production
+    needs: deploy-hk
+    runs-on: ubuntu-latest
+    environment: prod
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v3
+
+      - name: Instalar Databricks CLI
+        run: pip install databricks-cli
+
+      - name: Deploy Prod
+        env:
+          DATABRICKS_HOST:  ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          DEPLOY_PATH:      ${{ secrets.DEPLOY_PATH }}
+        run: |
+          databricks configure --token <<< "$DATABRICKS_HOST
+          $DATABRICKS_TOKEN"
+          databricks workspace mkdirs $DEPLOY_PATH
+          for f in notebooks/*.py; do
+            databricks workspace import "$f" \
+              "$DEPLOY_PATH/$(basename $f)" \
+              --language PYTHON --overwrite
+          done
+          echo "Deploy Prod concluido em $DEPLOY_PATH"
