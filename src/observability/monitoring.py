@@ -13,22 +13,29 @@ logging.basicConfig(
 logger = logging.getLogger("case-santander")
 
 
-def monitorar_camada(spark: SparkSession, nome: str, 
-                     camada: str, storage_account: str) -> dict:
+def monitorar_tabela(spark: SparkSession, tabela_uc: str) -> dict:
     """
-    Monitora qualidade de uma tabela Delta Lake.
+    Monitora qualidade de uma tabela via Unity Catalog.
     Returns: dicionario com metricas de qualidade
     """
     inicio = datetime.now()
-    path   = f"abfss://{camada}@{storage_account}.dfs.core.windows.net/{nome}/"
+    partes = tabela_uc.split(".")
+    camada = partes[1]
+    nome   = partes[2]
 
     try:
-        df    = spark.read.format("delta").load(path)
+        df    = spark.sql(f"SELECT * FROM {tabela_uc}")
         total = df.count()
+
+        if total == 0:
+            logger.error(f"[ALERTA CRITICO] {tabela_uc} — Sem registros!")
+            return {}
+
         nulos = sum(df.select([
-            F.sum(F.col(c).isNull().cast("int")).alias(c) 
+            F.sum(F.col(c).isNull().cast("int")).alias(c)
             for c in df.columns
         ]).first().asDict().values())
+
         duplicatas = total - df.dropDuplicates().count()
         qualidade  = round((1 - nulos / (total * len(df.columns))) * 100, 2)
 
@@ -50,36 +57,43 @@ def monitorar_camada(spark: SparkSession, nome: str,
         )
 
         if qualidade < 95:
-            logger.error(f"[ALERTA CRITICO] {camada}/{nome} — Qualidade: {qualidade}%")
+            logger.error(f"[ALERTA CRITICO] {tabela_uc} — Qualidade: {qualidade}%")
         if duplicatas > 0:
-            logger.warning(f"[ALERTA] {camada}/{nome} — Duplicatas: {duplicatas}")
-        if total == 0:
-            logger.error(f"[ALERTA CRITICO] {camada}/{nome} — Sem registros!")
+            logger.warning(f"[ALERTA] {tabela_uc} — Duplicatas: {duplicatas}")
 
         return metricas
 
     except Exception as e:
-        logger.error(f"[ERRO] {camada}/{nome}: {e}")
+        logger.error(f"[ERRO] {tabela_uc}: {e}")
         return {}
 
 
-def executar_monitoramento(spark: SparkSession, storage_account: str) -> list:
+def executar_monitoramento(spark: SparkSession, storage_account: str = None) -> list:
     """
-    Executa monitoramento em todas as camadas Silver e Gold.
+    Executa monitoramento em todas as camadas via Unity Catalog.
     Returns: lista de metricas por tabela
     """
     tabelas = [
-        ("acoes",      "silver"),
-        ("bcb",        "silver"),
-        ("world_bank", "silver"),
-        ("clientes",   "silver"),
-        ("ordens",     "silver"),
+        "case_santander.silver.acoes",
+        "case_santander.silver.bcb",
+        "case_santander.silver.world_bank",
+        "case_santander.silver.clientes",
+        "case_santander.silver.ordens",
+        "case_santander.gold.anomalias",
+        "case_santander.gold.posicao_clientes",
+        "case_santander.gold.score_risco_clientes",
+        "case_santander.gold.deteccao_fraude",
     ]
 
+    print(f"Monitorando {len(tabelas)} tabelas...")
     resultados = []
-    for tabela, camada in tabelas:
-        m = monitorar_camada(spark, tabela, camada, storage_account)
+
+    for tabela in tabelas:
+        m = monitorar_tabela(spark, tabela)
         if m:
             resultados.append(m)
+            print(f"  ✅ {tabela} — {m['total_registros']} registros — qualidade {m['qualidade_pct']}%")
+        else:
+            print(f"  ❌ {tabela} — erro ou sem dados")
 
     return resultados
