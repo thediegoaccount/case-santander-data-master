@@ -7,6 +7,7 @@ sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-da
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
 from datetime import datetime
+from src.config.settings import configure_adls
 
 
 def main():
@@ -15,17 +16,19 @@ def main():
 
     spark = DatabricksSession.builder.getOrCreate()
 
+    client_id       = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
+    tenant_id       = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
+    client_secret   = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
     storage_account = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
 
+    configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
     spark.sql("SET spark.databricks.delta.schema.autoMerge.enabled = true")
 
-    # Schemas já existem — apenas garante
     spark.sql("CREATE SCHEMA IF NOT EXISTS case_santander.bronze")
     spark.sql("CREATE SCHEMA IF NOT EXISTS case_santander.silver")
     spark.sql("CREATE SCHEMA IF NOT EXISTS case_santander.gold")
     print("✅ Schemas verificados!")
 
-    # Registrar tabelas Bronze
     tabelas_bronze = {
         "acoes":      f"abfss://bronze@{storage_account}.dfs.core.windows.net/acoes/",
         "bcb":        f"abfss://bronze@{storage_account}.dfs.core.windows.net/bcb/",
@@ -49,7 +52,6 @@ def main():
         except Exception as e:
             print(f"  ⚠️ case_santander.bronze.{tabela} → {e}")
 
-    # Registrar tabelas Gold via ADLS
     tabelas_gold = {
         "performance_acoes": f"abfss://gold@{storage_account}.dfs.core.windows.net/performance_acoes/",
         "anomalias":         f"abfss://gold@{storage_account}.dfs.core.windows.net/anomalias/",
