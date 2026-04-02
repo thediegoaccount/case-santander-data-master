@@ -14,7 +14,7 @@ from datetime import datetime
 import sys
 import os
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
 from src.config.settings import configure_adls
 from src.gold.anomalias import detectar_anomalias
