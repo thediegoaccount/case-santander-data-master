@@ -1,21 +1,12 @@
 """
 Job: Transformacao Silver
-Responsavel pela transformacao Bronze -> Silver
-para todas as fontes de dados.
-
-Execucao:
-    python jobs/job_silver.py
-
-Ou via Databricks Workflow:
-    Task: t2_silver
 """
+import sys
+sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
+
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
 from datetime import datetime
-import sys
-import os
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.config.settings import configure_adls
 from src.transformation.silver_acoes import transformar_acoes
@@ -41,10 +32,11 @@ def main():
     total_wb    = transformar_world_bank(spark, storage_account)
 
     fim = datetime.now()
-    duracao = (fim - inicio).total_seconds()
-
     print(f"\n=== JOB SILVER CONCLUIDO ===")
     print(f"Acoes:      {total_acoes} registros")
     print(f"BCB:        {total_bcb} registros")
     print(f"World Bank: {total_wb} registros")
-    print(f"Duracao:    {duracao:.2f}s")
+    print(f"Duracao:    {(fim - inicio).total_seconds():.2f}s")
+
+
+main()

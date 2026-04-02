@@ -1,5 +1,5 @@
 """
-Job: Extracao de Dados
+Job: SDC Type 2
 """
 import sys
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
@@ -9,14 +9,12 @@ from databricks.sdk.runtime import dbutils
 from datetime import datetime
 
 from src.config.settings import configure_adls
-from src.ingestion.yahoo_finance import extrair_acoes
-from src.ingestion.bcb import extrair_bcb
-from src.ingestion.world_bank import extrair_world_bank
+from src.clients.sdc import aplicar_sdc_clientes, aplicar_sdc_score_risco
 
 
 def main():
     inicio = datetime.now()
-    print(f"=== JOB EXTRACAO INICIADO: {inicio} ===")
+    print(f"=== JOB SDC INICIADO: {inicio} ===")
 
     spark = DatabricksSession.builder.getOrCreate()
 
@@ -27,16 +25,14 @@ def main():
 
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
 
-    total_acoes = extrair_acoes(spark, storage_account)
-    total_bcb   = extrair_bcb(spark, storage_account)
-    total_wb    = extrair_world_bank(spark, storage_account)
+    total_clientes = aplicar_sdc_clientes(spark, storage_account)
+    total_score    = aplicar_sdc_score_risco(spark, storage_account)
 
     fim = datetime.now()
-    print(f"\n=== JOB EXTRACAO CONCLUIDO ===")
-    print(f"Acoes:      {total_acoes} registros")
-    print(f"BCB:        {total_bcb} registros")
-    print(f"World Bank: {total_wb} registros")
-    print(f"Duracao:    {(fim - inicio).total_seconds():.2f}s")
+    print(f"\n=== JOB SDC CONCLUIDO ===")
+    print(f"Clientes SDC:    {total_clientes} registros ativos")
+    print(f"Score Risco SDC: {total_score} registros ativos")
+    print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
 
 main()

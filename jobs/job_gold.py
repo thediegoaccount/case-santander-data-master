@@ -1,20 +1,12 @@
 """
 Job: Analises Gold
-Responsavel pelos calculos e analises da camada Gold.
-
-Execucao:
-    python jobs/job_gold.py
-
-Ou via Databricks Workflow:
-    Task: t3_gold
 """
+import sys
+sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
+
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
 from datetime import datetime
-import sys
-import os
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.config.settings import configure_adls
 from src.gold.anomalias import detectar_anomalias
@@ -35,19 +27,16 @@ def main():
 
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
 
-    total_anomalias  = detectar_anomalias(spark, storage_account)
+    total_anomalias   = detectar_anomalias(spark, storage_account)
     total_performance = calcular_performance(spark, storage_account)
-    total_fraudes    = detectar_fraude(spark)
+    total_fraudes     = detectar_fraude(spark)
 
     fim = datetime.now()
-    duracao = (fim - inicio).total_seconds()
-
     print(f"\n=== JOB GOLD CONCLUIDO ===")
     print(f"Anomalias:   {total_anomalias}")
     print(f"Performance: {total_performance} registros")
     print(f"Fraudes:     {total_fraudes} criticos")
-    print(f"Duracao:     {duracao:.2f}s")
+    print(f"Duracao:     {(fim - inicio).total_seconds():.2f}s")
 
 
-if __name__ == "__main__":
-    main()
+main()
