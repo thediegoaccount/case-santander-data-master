@@ -20,15 +20,16 @@ jobs:
           python-version: "3.11"
 
       - name: Instalar dependencias
-        run: pip install pytest yfinance requests azure-eventhub
+        run: |
+          pip install pytest yfinance requests azure-eventhub
 
       - name: Rodar testes
         run: pytest tests/ -v
 
-      - name: Validar notebooks
+      - name: Validar modulos src/
         run: |
-          echo "Validando notebooks..."
-          for f in notebooks/*.py; do
+          echo "Validando modulos..."
+          for f in src/**/*.py jobs/*.py; do
             python -m py_compile "$f" && echo "OK: $f" || echo "ERRO: $f"
           done
 
@@ -53,12 +54,31 @@ jobs:
         run: |
           databricks configure --token <<< "$DATABRICKS_HOST
           $DATABRICKS_TOKEN"
-          databricks workspace mkdirs $DEPLOY_PATH
-          for f in notebooks/*.py; do
+
+          # Deploy src/
+          databricks workspace mkdirs $DEPLOY_PATH/src/config
+          databricks workspace mkdirs $DEPLOY_PATH/src/ingestion
+          databricks workspace mkdirs $DEPLOY_PATH/src/transformation
+          databricks workspace mkdirs $DEPLOY_PATH/src/gold
+          databricks workspace mkdirs $DEPLOY_PATH/src/clients
+          databricks workspace mkdirs $DEPLOY_PATH/src/observability
+          databricks workspace mkdirs $DEPLOY_PATH/src/streaming
+
+          for f in src/**/*.py; do
+            dir=$(dirname $f)
             databricks workspace import "$f" \
-              "$DEPLOY_PATH/$(basename $f)" \
+              "$DEPLOY_PATH/$f" \
               --language PYTHON --overwrite
           done
+
+          # Deploy jobs/
+          databricks workspace mkdirs $DEPLOY_PATH/jobs
+          for f in jobs/*.py; do
+            databricks workspace import "$f" \
+              "$DEPLOY_PATH/$f" \
+              --language PYTHON --overwrite
+          done
+
           echo "Deploy Dev concluido em $DEPLOY_PATH"
 
   deploy-hk:
@@ -82,12 +102,20 @@ jobs:
         run: |
           databricks configure --token <<< "$DATABRICKS_HOST
           $DATABRICKS_TOKEN"
-          databricks workspace mkdirs $DEPLOY_PATH
-          for f in notebooks/*.py; do
+
+          databricks workspace mkdirs $DEPLOY_PATH/src/config
+          databricks workspace mkdirs $DEPLOY_PATH/src/ingestion
+          databricks workspace mkdirs $DEPLOY_PATH/src/transformation
+          databricks workspace mkdirs $DEPLOY_PATH/src/gold
+          databricks workspace mkdirs $DEPLOY_PATH/src/observability
+          databricks workspace mkdirs $DEPLOY_PATH/jobs
+
+          for f in src/**/*.py jobs/*.py; do
             databricks workspace import "$f" \
-              "$DEPLOY_PATH/$(basename $f)" \
+              "$DEPLOY_PATH/$f" \
               --language PYTHON --overwrite
           done
+
           echo "Deploy HK concluido em $DEPLOY_PATH"
 
   deploy-prod:
@@ -111,10 +139,18 @@ jobs:
         run: |
           databricks configure --token <<< "$DATABRICKS_HOST
           $DATABRICKS_TOKEN"
-          databricks workspace mkdirs $DEPLOY_PATH
-          for f in notebooks/*.py; do
+
+          databricks workspace mkdirs $DEPLOY_PATH/src/config
+          databricks workspace mkdirs $DEPLOY_PATH/src/ingestion
+          databricks workspace mkdirs $DEPLOY_PATH/src/transformation
+          databricks workspace mkdirs $DEPLOY_PATH/src/gold
+          databricks workspace mkdirs $DEPLOY_PATH/src/observability
+          databricks workspace mkdirs $DEPLOY_PATH/jobs
+
+          for f in src/**/*.py jobs/*.py; do
             databricks workspace import "$f" \
-              "$DEPLOY_PATH/$(basename $f)" \
+              "$DEPLOY_PATH/$f" \
               --language PYTHON --overwrite
           done
+
           echo "Deploy Prod concluido em $DEPLOY_PATH"
