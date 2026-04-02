@@ -11,6 +11,10 @@ def transformar_bcb(spark: SparkSession, storage_account: str) -> int:
     print("Transformando BCB Bronze -> Silver...")
 
     df = spark.read.parquet(bronze_path)
+    print("Schema Bronze:")
+    df.printSchema()
+    print("Amostra:")
+    df.show(3)
 
     df_silver = df \
         .withColumn("data",      F.to_date("data", "dd/MM/yyyy")) \
@@ -21,13 +25,16 @@ def transformar_bcb(spark: SparkSession, storage_account: str) -> int:
         .withColumn("data_processamento", F.lit(data_hoje)) \
         .filter(F.col("valor").isNotNull()) \
         .filter(F.col("data").isNotNull()) \
-        .dropDuplicates(["data", "indicador"])
+        .dropDuplicates(["data", "indicador"]) \
+        .drop("extracao")
+
+    print(f"Registros após transformação: {df_silver.count()}")
+    df_silver.show(3)
 
     df_silver.write \
         .format("delta") \
         .mode("overwrite") \
         .option("mergeSchema", "true") \
-        .partitionBy("indicador", "ano") \
         .save(silver_path)
 
     total = df_silver.count()
