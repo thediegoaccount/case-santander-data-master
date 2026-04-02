@@ -22,7 +22,8 @@ def main():
         df_metricas = spark.createDataFrame(resultados)
         df_metricas.write \
             .format("delta") \
-            .mode("append") \
+            .mode("overwrite") \
+            .option("mergeSchema", "true") \
             .saveAsTable("case_santander.gold.observabilidade")
 
     fim = datetime.now()
