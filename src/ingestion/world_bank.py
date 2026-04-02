@@ -4,10 +4,6 @@ from datetime import datetime
 
 
 def extrair_world_bank(spark, storage_account: str) -> int:
-    """
-    Extrai indicadores macroeconomicos do World Bank API
-    e grava na camada Bronze do ADLS.
-    """
     data_hoje = datetime.now().strftime("%Y-%m-%d")
 
     def buscar(indicador, nome):
@@ -17,7 +13,7 @@ def extrair_world_bank(spark, storage_account: str) -> int:
             data = response.json()
             registros = data[1]
             df = pd.DataFrame([{
-                "ano":   r["date"],        # ano real do indicador ex: "2022"
+                "ano":   r["date"],
                 "valor": r["value"]
             } for r in registros if r["value"] is not None])
             df["indicador"]     = nome
@@ -35,7 +31,8 @@ def extrair_world_bank(spark, storage_account: str) -> int:
     df_desemprego = buscar("SL.UEM.TOTL.ZS",    "desemprego")
     df_wb         = pd.concat([df_pib, df_desemprego], ignore_index=True)
 
-    bronze_path = f"abfss://bronze@{storage_account}.dfs.core.windows.net/world_bank/data={data_hoje}/"
+    # Usando extracao= em vez de data= para evitar conflito
+    bronze_path = f"abfss://bronze@{storage_account}.dfs.core.windows.net/world_bank/extracao={data_hoje}/"
     df_spark = spark.createDataFrame(df_wb)
     df_spark.write.mode("overwrite").parquet(bronze_path)
 

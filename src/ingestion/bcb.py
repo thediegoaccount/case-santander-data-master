@@ -4,12 +4,6 @@ from datetime import datetime
 
 
 def extrair_bcb(spark, storage_account: str) -> int:
-    """
-    Extrai indicadores economicos do Banco Central (BCB)
-    e grava na camada Bronze do ADLS.
-
-    Returns: total de registros gravados
-    """
     data_hoje    = datetime.now().strftime("%Y-%m-%d")
     data_inicial = "01/04/2021"
     data_final   = "01/04/2026"
@@ -22,7 +16,6 @@ def extrair_bcb(spark, storage_account: str) -> int:
             df = pd.DataFrame(response.json())
             df["indicador"]     = nome
             df["data_extracao"] = data_hoje
-            df.columns          = [c.lower() for c in df.columns]
             df["valor"]         = pd.to_numeric(df["valor"], errors="coerce")
             print(f"  OK: {nome} — {len(df)} registros")
             return df
@@ -37,7 +30,6 @@ def extrair_bcb(spark, storage_account: str) -> int:
             df = pd.DataFrame(response.json())
             df["indicador"]     = nome
             df["data_extracao"] = data_hoje
-            df.columns          = [c.lower() for c in df.columns]
             df["valor"]         = pd.to_numeric(df["valor"], errors="coerce")
             print(f"  OK: {nome} — {len(df)} registros")
             return df
@@ -51,7 +43,8 @@ def extrair_bcb(spark, storage_account: str) -> int:
     df_ipca   = buscar_mensal(433, "ipca")
     df_bcb    = pd.concat([df_selic, df_cambio, df_ipca], ignore_index=True)
 
-    bronze_path = f"abfss://bronze@{storage_account}.dfs.core.windows.net/bcb/data={data_hoje}/"
+    # Usando extracao= em vez de data= para evitar conflito com coluna data
+    bronze_path = f"abfss://bronze@{storage_account}.dfs.core.windows.net/bcb/extracao={data_hoje}/"
     df_spark = spark.createDataFrame(df_bcb)
     df_spark.write.mode("overwrite").parquet(bronze_path)
 
