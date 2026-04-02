@@ -19,13 +19,11 @@ def main():
     resultados = executar_monitoramento(spark)
 
     if resultados:
-        # Drop e recria para evitar conflito de schema
-        spark.sql("DROP TABLE IF EXISTS case_santander.gold.observabilidade")
-
         df_metricas = spark.createDataFrame(resultados)
         df_metricas.write \
             .format("delta") \
-            .mode("overwrite") \
+            .mode("append") \
+            .option("overwriteSchema", "true") \
             .saveAsTable("case_santander.gold.observabilidade")
 
     fim = datetime.now()
