@@ -1,6 +1,3 @@
-"""
-Deteccao de anomalias em acoes da B3 via Z-Score
-"""
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 from pyspark.sql import SparkSession
@@ -8,19 +5,15 @@ from datetime import datetime
 
 
 def detectar_anomalias(spark: SparkSession, storage_account: str) -> int:
-    """
-    Detecta anomalias nas variacoes diarias de acoes
-    usando Z-Score e grava na camada Gold.
-
-    Returns: total de anomalias detectadas
-    """
     data_hoje   = datetime.now().strftime("%Y-%m-%d")
     silver_path = f"abfss://silver@{storage_account}.dfs.core.windows.net/acoes/"
     gold_path   = f"abfss://gold@{storage_account}.dfs.core.windows.net/anomalias/"
 
     print("Detectando anomalias...")
 
-    df = spark.read.format("delta").load(silver_path)
+    df = spark.read.format("delta").load(silver_path) \
+        .dropDuplicates(["date", "ticker"])
+
     window_ticker = Window.partitionBy("ticker")
 
     df_anomalias = df \
@@ -46,6 +39,7 @@ def detectar_anomalias(spark: SparkSession, storage_account: str) -> int:
     df_anomalias.write \
         .format("delta") \
         .mode("overwrite") \
+        .option("mergeSchema", "true") \
         .save(gold_path)
 
     total = df_anomalias.filter(F.col("anomalia") == True).count()
