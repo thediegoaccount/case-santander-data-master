@@ -9,6 +9,7 @@ import sys
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
 from databricks.connect import DatabricksSession
+from databricks.sdk.runtime import dbutils
 from datetime import datetime
 
 
@@ -17,6 +18,9 @@ def main():
     print(f"=== JOB UNITY CATALOG INICIADO: {inicio} ===")
 
     spark = DatabricksSession.builder.getOrCreate()
+
+    # Credenciais via Key Vault
+    storage_account = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
 
     # Habilitar mergeSchema globalmente
     spark.sql("SET spark.databricks.delta.schema.autoMerge.enabled = true")
@@ -30,12 +34,12 @@ def main():
 
     # Registrar tabelas Bronze
     tabelas_bronze = {
-        "acoes":      "abfss://bronze@stcasesantander.dfs.core.windows.net/acoes/",
-        "bcb":        "abfss://bronze@stcasesantander.dfs.core.windows.net/bcb/",
-        "world_bank": "abfss://bronze@stcasesantander.dfs.core.windows.net/world_bank/",
-        "kafka":      "abfss://bronze@stcasesantander.dfs.core.windows.net/kafka/",
-        "clientes":   "abfss://bronze@stcasesantander.dfs.core.windows.net/clientes/",
-        "ordens":     "abfss://bronze@stcasesantander.dfs.core.windows.net/ordens/",
+        "acoes":      f"abfss://bronze@{storage_account}.dfs.core.windows.net/acoes/",
+        "bcb":        f"abfss://bronze@{storage_account}.dfs.core.windows.net/bcb/",
+        "world_bank": f"abfss://bronze@{storage_account}.dfs.core.windows.net/world_bank/",
+        "kafka":      f"abfss://bronze@{storage_account}.dfs.core.windows.net/kafka/",
+        "clientes":   f"abfss://bronze@{storage_account}.dfs.core.windows.net/clientes/",
+        "ordens":     f"abfss://bronze@{storage_account}.dfs.core.windows.net/ordens/",
     }
 
     for tabela, path in tabelas_bronze.items():
@@ -54,9 +58,9 @@ def main():
 
     # Registrar tabelas Gold via ADLS
     tabelas_gold = {
-        "performance_acoes": "abfss://gold@stcasesantander.dfs.core.windows.net/performance_acoes/",
-        "anomalias":         "abfss://gold@stcasesantander.dfs.core.windows.net/anomalias/",
-        "acoes_vs_cambio":   "abfss://gold@stcasesantander.dfs.core.windows.net/acoes_vs_cambio/",
+        "performance_acoes": f"abfss://gold@{storage_account}.dfs.core.windows.net/performance_acoes/",
+        "anomalias":         f"abfss://gold@{storage_account}.dfs.core.windows.net/anomalias/",
+        "acoes_vs_cambio":   f"abfss://gold@{storage_account}.dfs.core.windows.net/acoes_vs_cambio/",
     }
 
     for tabela, path in tabelas_gold.items():
