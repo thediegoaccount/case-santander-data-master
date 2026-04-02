@@ -11,11 +11,17 @@ def transformar_world_bank(spark: SparkSession, storage_account: str) -> int:
     print("Transformando World Bank Bronze -> Silver...")
 
     df = spark.read.parquet(bronze_path)
-    df.printSchema()
-    df.show(3)
+    print("Colunas disponíveis:", df.columns)
+
+    # Compatível com schema antigo (data) e novo (ano)
+    if "ano" in df.columns:
+        df = df.withColumn("ano", F.col("ano").cast("integer"))
+    elif "data" in df.columns:
+        df = df.withColumn("ano", F.col("data").cast("integer"))
+    else:
+        raise Exception("Coluna de ano não encontrada no Bronze!")
 
     df_silver = df \
-        .withColumn("ano",   F.col("ano").cast("integer")) \
         .withColumn("valor", F.round("valor", 4)) \
         .withColumn("data_processamento", F.lit(data_hoje)) \
         .filter(F.col("valor").isNotNull()) \
@@ -25,7 +31,6 @@ def transformar_world_bank(spark: SparkSession, storage_account: str) -> int:
         .format("delta") \
         .mode("overwrite") \
         .option("mergeSchema", "true") \
-        .partitionBy("indicador", "ano") \
         .save(silver_path)
 
     total = df_silver.count()
