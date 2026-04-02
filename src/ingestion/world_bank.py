@@ -7,8 +7,6 @@ def extrair_world_bank(spark, storage_account: str) -> int:
     """
     Extrai indicadores macroeconomicos do World Bank API
     e grava na camada Bronze do ADLS.
-
-    Returns: total de registros gravados
     """
     data_hoje = datetime.now().strftime("%Y-%m-%d")
 
@@ -19,7 +17,7 @@ def extrair_world_bank(spark, storage_account: str) -> int:
             data = response.json()
             registros = data[1]
             df = pd.DataFrame([{
-                "data":  r["date"],
+                "ano":   r["date"],        # ano real do indicador ex: "2022"
                 "valor": r["value"]
             } for r in registros if r["value"] is not None])
             df["indicador"]     = nome
