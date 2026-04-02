@@ -1,19 +1,12 @@
 """
-Job: SDC (Slowly Changing Dimensions)
-Aplica SDC Type 2 nas dimensoes de clientes e score de risco.
-
-Execucao:
-    python jobs/job_sdc.py
-
-Ou via Databricks Workflow:
-    Task: t9_sdc
+Job: SDC Type 2
 """
+import sys
+sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
+
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
 from datetime import datetime
-import sys
-
-sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
 from src.config.settings import configure_adls
 from src.clients.sdc import aplicar_sdc_clientes, aplicar_sdc_score_risco
@@ -42,5 +35,4 @@ def main():
     print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
 
-if __name__ == "__main__":
-    main()
+main()
