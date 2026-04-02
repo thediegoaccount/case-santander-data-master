@@ -29,16 +29,21 @@ def main():
     spark.sql("CREATE SCHEMA IF NOT EXISTS case_santander.gold")
     print("✅ Schemas verificados!")
 
-    tabelas_bronze = {
+    # Tabelas Bronze em formato Parquet
+    tabelas_bronze_parquet = {
         "acoes":      f"abfss://bronze@{storage_account}.dfs.core.windows.net/acoes/",
         "bcb":        f"abfss://bronze@{storage_account}.dfs.core.windows.net/bcb/",
         "world_bank": f"abfss://bronze@{storage_account}.dfs.core.windows.net/world_bank/",
         "kafka":      f"abfss://bronze@{storage_account}.dfs.core.windows.net/kafka/",
-        "clientes":   f"abfss://bronze@{storage_account}.dfs.core.windows.net/clientes/",
-        "ordens":     f"abfss://bronze@{storage_account}.dfs.core.windows.net/ordens/",
     }
 
-    for tabela, path in tabelas_bronze.items():
+    # Tabelas Bronze em formato Delta
+    tabelas_bronze_delta = {
+        "clientes": f"abfss://bronze@{storage_account}.dfs.core.windows.net/clientes/",
+        "ordens":   f"abfss://bronze@{storage_account}.dfs.core.windows.net/ordens/",
+    }
+
+    for tabela, path in tabelas_bronze_parquet.items():
         try:
             spark.sql(f"DROP TABLE IF EXISTS case_santander.bronze.{tabela}")
             df = spark.read.format("parquet").load(path)
@@ -52,6 +57,21 @@ def main():
         except Exception as e:
             print(f"  ⚠️ case_santander.bronze.{tabela} → {e}")
 
+    for tabela, path in tabelas_bronze_delta.items():
+        try:
+            spark.sql(f"DROP TABLE IF EXISTS case_santander.bronze.{tabela}")
+            df = spark.read.format("delta").load(path)
+            df.write \
+                .format("delta") \
+                .mode("overwrite") \
+                .option("mergeSchema", "true") \
+                .saveAsTable(f"case_santander.bronze.{tabela}")
+            count = spark.sql(f"SELECT COUNT(*) as total FROM case_santander.bronze.{tabela}").collect()[0]["total"]
+            print(f"  ✅ case_santander.bronze.{tabela} → {count} registros")
+        except Exception as e:
+            print(f"  ⚠️ case_santander.bronze.{tabela} → {e}")
+
+    # Tabelas Gold
     tabelas_gold = {
         "performance_acoes": f"abfss://gold@{storage_account}.dfs.core.windows.net/performance_acoes/",
         "anomalias":         f"abfss://gold@{storage_account}.dfs.core.windows.net/anomalias/",
