@@ -1,7 +1,6 @@
 """
-Job: SDC Type 2
-Aplica Slowly Changing Dimensions nas tabelas de clientes
-e score de risco, mantendo historico completo de mudancas.
+Job: SDC (Slowly Changing Dimensions)
+Aplica SDC Type 2 nas dimensoes de clientes e score de risco.
 
 Execucao:
     python jobs/job_sdc.py
@@ -38,12 +37,10 @@ def main():
     total_score    = aplicar_sdc_score_risco(spark, storage_account)
 
     fim = datetime.now()
-    duracao = (fim - inicio).total_seconds()
-
     print(f"\n=== JOB SDC CONCLUIDO ===")
-    print(f"SDC Clientes:    {total_clientes} registros ativos")
-    print(f"SDC Score Risco: {total_score} registros ativos")
-    print(f"Duracao:         {duracao:.2f}s")
+    print(f"Clientes SDC:    {total_clientes} registros ativos")
+    print(f"Score Risco SDC: {total_score} registros ativos")
+    print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
 
 if __name__ == "__main__":
