@@ -11,11 +11,17 @@ def extrair_world_bank(spark, storage_account: str) -> int:
         try:
             response = requests.get(url, timeout=10)
             data = response.json()
+            if not data or len(data) < 2 or not data[1]:
+                print(f"  VAZIO: {nome}")
+                return pd.DataFrame()
             registros = data[1]
             df = pd.DataFrame([{
                 "ano":   r["date"],
                 "valor": r["value"]
             } for r in registros if r["value"] is not None])
+            if df.empty:
+                print(f"  VAZIO: {nome}")
+                return pd.DataFrame()
             df["indicador"]     = nome
             df["data_extracao"] = data_hoje
             df["fonte"]         = "world_bank"
@@ -29,9 +35,15 @@ def extrair_world_bank(spark, storage_account: str) -> int:
     print("Extraindo World Bank...")
     df_pib        = buscar("NY.GDP.MKTP.KD.ZG", "pib_anual")
     df_desemprego = buscar("SL.UEM.TOTL.ZS",    "desemprego")
-    df_wb         = pd.concat([df_pib, df_desemprego], ignore_index=True)
+    
+    dfs = [df for df in [df_pib, df_desemprego] if not df.empty]
+    
+    if not dfs:
+        print("⚠️ World Bank sem dados disponíveis — pulando extração")
+        return 0
 
-    # Usando extracao= em vez de data= para evitar conflito
+    df_wb = pd.concat(dfs, ignore_index=True)
+
     bronze_path = f"abfss://bronze@{storage_account}.dfs.core.windows.net/world_bank/extracao={data_hoje}/"
     df_spark = spark.createDataFrame(df_wb)
     df_spark.write.mode("overwrite").parquet(bronze_path)
