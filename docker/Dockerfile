@@ -1,0 +1,7 @@
+FROM apache/airflow:2.8.0-python3.11
+
+ENV PATH="/home/airflow/.local/bin:${PATH}"
+
+RUN pip install --no-cache-dir \
+    apache-airflow-providers-databricks==4.7.0 \
+    databricks-sdk==0.20.0
