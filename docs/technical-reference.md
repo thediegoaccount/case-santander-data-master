@@ -1167,6 +1167,23 @@ Docker Compose
 ├── airflow-scheduler   → Dispara as DAGs no horário
 └── airflow-init        → Inicializa DB e cria usuário admin
 ```
+### Papel do Airflow no projeto
+
+O Airflow **não substitui** o Databricks Workflow — os dois coexistem com
+responsabilidades distintas:
+
+| Orquestrador | Ambiente | Trigger | Propósito |
+|---|---|---|---|
+| Databricks Workflow | Produção | Agendado 06:00 | Pipeline diário automatizado |
+| Apache Airflow + Docker | Desenvolvimento | Manual | Testes, demonstração, multi-cloud |
+
+Em produção, o **Databricks Workflow** é o único orquestrador ativo.
+O **Airflow** demonstra como o pipeline seria orquestrado em um ambiente
+externo ao Databricks — por exemplo, em uma empresa que já possui
+infraestrutura Airflow ou que opera em multi-cloud.
+
+Os **jobs Python são os mesmos** — nenhuma duplicação de código.
+O Airflow chama os mesmos `jobs/*.py` via API REST do Databricks.
 
 ### Inicialização
 
@@ -1176,6 +1193,21 @@ docker compose -f docker/docker-compose.yml --env-file docker/.env up airflow-in
 
 # Subir stack completa
 docker compose -f docker/docker-compose.yml --env-file docker/.env up -d
+
+### Uso recorrente
+```bash
+# Subir (já inicializado anteriormente)
+docker compose -f docker/docker-compose.yml --env-file docker/.env up -d
+
+# Verificar status dos containers
+docker compose -f docker/docker-compose.yml --env-file docker/.env ps
+
+# Ver logs em tempo real
+docker compose -f docker/docker-compose.yml --env-file docker/.env logs -f
+
+# Derrubar a stack
+docker compose -f docker/docker-compose.yml --env-file docker/.env down
+```
 
 # Acessar
 http://localhost:8080
