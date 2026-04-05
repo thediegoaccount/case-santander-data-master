@@ -11,6 +11,12 @@
 7. [Configuração e Dependências](#7-configuração-e-dependências)
 8. [Guia de Desenvolvimento](#8-guia-de-desenvolvimento)
 9. [Monitoramento e Alertas](#9-monitoramento-e-alertas)
+10. [SDC Type 2](#10-sdc-type-2)
+11. [LGPD — Práticas Adotadas](#11-lgpd--práticas-adotadas)
+12. [Docker e Apache Airflow](#12-docker-e-apache-airflow)
+13. [CI/CD — Multi-Ambiente](#13-cicd--multi-ambiente)
+14. [Databricks Genie AI](#14-databricks-genie-ai)
+15. [Lakehouse Monitoring](#15-lakehouse-monitoring)
 
 ---
 
@@ -20,34 +26,37 @@
 
 ```
 BRONZE (Dados Brutos)
-  └── Parquet particionado por data
+  └── Parquet/Delta particionado por data de extração
   └── Sem transformações — fidelidade total à fonte
-  └── Retenção: 30 dias (lifecycle policy)
+  └── Retenção: 30 dias (lifecycle policy ADLS)
 
 SILVER (Dados Curados)
-  └── Delta Lake com schema validado
-  └── Tipagem correta, nulos removidos
+  └── Delta Lake com schema validado e mergeSchema
+  └── Tipagem correta, nulos removidos, duplicatas eliminadas
   └── Features derivadas (variação %, ano, mês, trimestre)
   └── Particionamento otimizado para leitura
 
 GOLD (Dados Analíticos)
   └── Delta Lake — tabelas de negócio
-  └── Agregações, scores, alertas
-  └── Prontas para consumo por dashboards e SQL
+  └── Agregações, scores, alertas, SDC Type 2
+  └── Prontas para consumo por dashboards, SQL e Genie AI
 ```
 
 ### Componentes de Plataforma
 
 | Serviço | Nome no Projeto | Função |
 |---|---|---|
-| Azure ADLS Gen2 | `stcasesantander` | Data lake — camadas Bronze/Silver/Gold |
+| Azure ADLS Gen2 | `stcasesantander` | Data lake — Bronze/Silver/Gold |
 | Azure Databricks | `dbw-case-santander` | Compute — Spark ETL e analytics |
 | Azure Data Factory | `adf-case-santander` | Orquestração batch (05:00 diário) |
 | Azure Event Hub | `evhcasesantander` | Streaming de transações financeiras |
 | Azure Key Vault | `kv-case-santander` | Gestão de segredos e credenciais |
 | Azure SQL Database | `sqldb-case-santander` | Serving layer para dashboards |
 | Unity Catalog | `case_santander` | Governança e catálogo de dados |
-| GitHub Actions | `.github/workflows/ci-cd.yml` | CI/CD multi-ambiente |
+| GitHub Actions | `.github/workflows/ci-cd.yml` | CI/CD multi-ambiente (dev/hk/prod) |
+| Apache Airflow | `docker/docker-compose.yml` | Orquestração local via Docker |
+| Databricks Genie | Space: Corretora Santander | Agente conversacional IA |
+| Lakehouse Monitoring | Unity Catalog Quality | Monitoramento automático de qualidade |
 
 ---
 
@@ -56,32 +65,45 @@ GOLD (Dados Analíticos)
 ```
 src/
 ├── config/
-│   └── settings.py         # Configuração central: paths, credenciais, Spark
+│   └── settings.py              # Configuração central: paths, credenciais, Spark
 ├── ingestion/
-│   ├── yahoo_finance.py    # Extração de ações da B3 via yfinance
-│   ├── bcb.py              # Extração de indicadores do Banco Central
-│   └── world_bank.py       # Extração de dados macroeconômicos
+│   ├── yahoo_finance.py         # Extração de ações da B3 via yfinance
+│   ├── bcb.py                   # Extração de indicadores do Banco Central
+│   └── world_bank.py            # Extração de dados macroeconômicos
 ├── transformation/
-│   ├── silver_acoes.py     # Bronze → Silver: ações
-│   ├── silver_bcb.py       # Bronze → Silver: indicadores BCB
-│   └── silver_world_bank.py # Bronze → Silver: World Bank
+│   ├── silver_acoes.py          # Bronze → Silver: ações
+│   ├── silver_bcb.py            # Bronze → Silver: indicadores BCB
+│   └── silver_world_bank.py     # Bronze → Silver: World Bank
 ├── gold/
-│   ├── anomalias.py        # Detecção de anomalias por Z-Score
-│   ├── fraude.py           # Motor de detecção de fraudes
-│   └── performance.py      # Métricas de performance por ação/setor
+│   ├── anomalias.py             # Detecção de anomalias por Z-Score
+│   ├── fraude.py                # Motor de detecção de fraudes
+│   └── performance.py           # Métricas de performance por ação/setor
 ├── clients/
-│   └── sdc.py              # Slowly Changing Dimensions Type 2
+│   └── sdc.py                   # Slowly Changing Dimensions Type 2
 ├── observability/
-│   └── monitoring.py       # Qualidade de dados e alertas
+│   └── monitoring.py            # Qualidade de dados e alertas via Unity Catalog
 └── streaming/
-    └── __init__.py         # Consumer Kafka/Event Hub (placeholder)
+    └── __init__.py              # Placeholder streaming
 
 jobs/
-├── job_extracao.py         # Orquestra todas as ingestões
-├── job_silver.py           # Orquestra todas as transformações Silver
-├── job_gold.py             # Orquestra geração das tabelas Gold
-├── job_observabilidade.py  # Orquestra monitoramento de qualidade
-└── job_sdc.py              # Orquestra aplicação de SDC Type 2
+├── job_unity_catalog.py         # t0 — Registra tabelas Bronze no Unity Catalog
+├── job_extracao.py              # t1 — Orquestra todas as ingestões
+├── job_silver.py                # t2 — Orquestra todas as transformações Silver
+├── job_corretora_analises.py    # t7 — Posição, score de risco, fraude, SQL
+├── job_sdc.py                   # t9 — SDC Type 2 clientes e score risco
+├── job_gold.py                  # t3 — Orquestra geração das tabelas Gold
+├── job_observabilidade.py       # t4 — Orquestra monitoramento de qualidade
+├── job_streaming.py             # t5 — Structured Streaming via arquivos Delta
+├── job_clientes_ordens.py       # t6 — Ingestão Kaggle + ordens simuladas
+├── job_lakehouse_monitoring.py  # t8 — Lakehouse Monitoring via SDK
+└── job_carga_sql.py             # t_sql — Carga das tabelas Gold no Azure SQL
+
+dags/
+└── dag_pipeline_santander.py    # DAG Airflow — orquestra via API Databricks
+
+docker/
+├── Dockerfile                   # Imagem Airflow customizada
+└── docker-compose.yml           # Stack completa: postgres + webserver + scheduler
 ```
 
 ---
@@ -90,71 +112,79 @@ jobs/
 
 ### `src/config/settings.py`
 
-#### `get_paths(spark=None)`
+#### `get_paths(storage_account)`
+
 Retorna dicionário com todos os caminhos ABFSS do data lake.
 
 ```python
-paths = get_paths()
-# paths["bronze_acoes"]      → abfss://bronze@.../acoes
-# paths["silver_acoes"]      → abfss://silver@.../acoes
-# paths["gold_anomalias"]    → abfss://gold@.../anomalias
-# paths["observabilidade"]   → abfss://gold@.../observabilidade
+paths = get_paths("stcasesantander")
+# paths["bronze_acoes"]    → abfss://bronze@.../acoes/
+# paths["silver_clientes"] → abfss://silver@.../clientes/
+# paths["gold_anomalias"]  → abfss://gold@.../anomalias/
 ```
 
-**Retorno:** `dict[str, str]` com ~20 paths mapeados.
+**Retorno:** `dict[str, str]` com ~16 paths mapeados.
 
-#### `configure_adls(spark)`
+#### `configure_adls(spark, storage_account, client_id, tenant_id, client_secret)`
+
 Configura autenticação OAuth2 para acesso ao ADLS Gen2 via Service Principal.
 
 **Parâmetros:**
-- `spark` — SparkSession ativa
 
-**Efeito:** Configura as chaves `fs.azure.*` na SparkSession.
+- `spark` — SparkSession ativa
+- `storage_account` — Nome da conta ADLS
+- `client_id`, `tenant_id`, `client_secret` — Credenciais do Service Principal
+
+**Efeito:** Configura as chaves `fs.azure.*` na SparkSession para acesso ao ADLS.
 
 #### `get_spark()`
-Cria e retorna uma SparkSession via Databricks Connect.
+
+Cria e retorna uma SparkSession via Databricks Connect (uso local).
 
 **Retorno:** `SparkSession`
 
-#### `get_credentials(spark, secret_name)`
-Recupera um segredo do Azure Key Vault via `dbutils.secrets`.
+#### `get_credentials(dbutils)`
+
+Recupera todos os segredos do Azure Key Vault via `dbutils.secrets`.
 
 **Parâmetros:**
-- `spark` — SparkSession com dbutils disponível
-- `secret_name` — Nome do segredo no Key Vault
 
-**Retorno:** `str` com o valor do segredo.
+- `dbutils` — dbutils do Databricks
+
+**Retorno:** `dict` com client_id, tenant_id, client_secret, storage_account, sql_conn, kaggle_username, kaggle_key.
 
 ---
 
 ### `src/ingestion/yahoo_finance.py`
 
-#### `extrair_acoes(spark, paths)`
+#### `extrair_acoes(spark, storage_account, acoes=ACOES)`
+
 Extrai histórico de 2 anos das 9 ações B3 monitoradas.
 
 **Ações monitoradas:**
+
 ```
 PETR4.SA, VALE3.SA, ITUB4.SA, BBDC4.SA, ABEV3.SA,
 MGLU3.SA, WEGE3.SA, BBAS3.SA, SANB11.SA
 ```
 
-**Parâmetros:**
-- `spark` — SparkSession
-- `paths` — dict de paths (de `get_paths()`)
+**Saída:** Parquet em `bronze/acoes/data={data_hoje}/` com colunas:
 
-**Saída:** Parquet em `paths["bronze_acoes"]` com colunas:
 ```
-ticker, date, open, high, low, close, volume, adjclose, extraction_timestamp
+ticker, date, open, high, low, close, volume, data_extracao
 ```
+
+**Retorno:** `int` — total de registros gravados.
 
 ---
 
 ### `src/ingestion/bcb.py`
 
-#### `extrair_bcb(spark, paths)`
-Extrai indicadores do Banco Central do Brasil via REST API (`bcb.gov.br/dados/serie`).
+#### `extrair_bcb(spark, storage_account)`
 
-**Indicadores extraídos:**
+Extrai indicadores do Banco Central do Brasil via REST API.
+
+**Indicadores:**
 
 | Indicador | Código BCB | Frequência |
 |---|---|---|
@@ -162,75 +192,76 @@ Extrai indicadores do Banco Central do Brasil via REST API (`bcb.gov.br/dados/se
 | Câmbio USD/BRL | 1 | Diária |
 | IPCA (inflação) | 433 | Mensal |
 
-**Saída:** Parquet em `paths["bronze_bcb"]` com colunas:
+**Saída:** Parquet em `bronze/bcb/extracao={data_hoje}/` com colunas:
+
 ```
-data, valor, indicador
+data, valor, indicador, data_extracao
 ```
+
+> **Nota:** A partição usa `extracao=` (não `data=`) para evitar conflito com a coluna `data` dos indicadores.
+
+**Retorno:** `int` — total de registros gravados.
 
 ---
 
 ### `src/ingestion/world_bank.py`
 
-#### `extrair_world_bank(spark, paths)`
+#### `extrair_world_bank(spark, storage_account)`
+
 Extrai indicadores macroeconômicos do Brasil via World Bank REST API.
 
-**Indicadores extraídos:**
+**Indicadores:**
 
 | Indicador | Código | Frequência |
 |---|---|---|
 | Crescimento do PIB | NY.GDP.MKTP.KD.ZG | Anual |
 | Taxa de desemprego | SL.UEM.TOTL.ZS | Anual |
 
-**Saída:** Parquet em `paths["bronze_world_bank"]` com colunas:
+**Saída:** Parquet em `bronze/world_bank/extracao={data_hoje}/` com colunas:
+
 ```
-data, valor, indicador
+ano, valor, indicador, data_extracao, fonte
 ```
+
+**Retorno:** `int` — total de registros gravados (0 se API retornar vazio).
 
 ---
 
 ### `src/transformation/silver_acoes.py`
 
-#### `transformar_acoes(spark, paths)`
+#### `transformar_acoes(spark, storage_account)`
+
 Transforma dados Bronze de ações para Silver com Delta Lake.
 
 **Transformações aplicadas:**
-- Cast de tipos (`date` → `DateType`, preços/volume → `DoubleType`)
-- Filtro de nulos em `close` e zeros em `volume`
-- Coluna `variacao_pct`: `(close - open) / open * 100`
-- Coluna `amplitude`: `high - low`
-- Colunas temporais: `ano`, `mes`, `trimestre`
-- Coluna `empresa`: mapeamento de ticker para nome da empresa
-- Coluna `setor`: mapeamento de ticker para setor B3
 
-**Mapeamento ticker → empresa:**
-```python
-{
-    "PETR4": "Petrobras",
-    "VALE3": "Vale",
-    "ITUB4": "Itaú Unibanco",
-    "BBDC4": "Bradesco",
-    "ABEV3": "Ambev",
-    "MGLU3": "Magazine Luiza",
-    "WEGE3": "WEG",
-    "BBAS3": "Banco do Brasil",
-    "SANB11": "Santander BR"
-}
-```
+- Cast de tipos (`date` → `DateType`, preços → `DoubleType`)
+- Filtro de nulos em `close` e zeros em `volume`
+- `variacao_diaria_pct`: `(close - open) / open * 100`
+- `amplitude_diaria`: `high - low`
+- Colunas temporais: `ano`, `mes`, `trimestre`
+- `empresa`: mapeamento ticker → nome
+- `setor`: mapeamento ticker → setor B3
+- `dropDuplicates(["date", "ticker"])`
 
 **Particionamento Delta:** `ano`, `mes`
+
+**Retorno:** `int` — total de registros gravados.
 
 ---
 
 ### `src/transformation/silver_bcb.py`
 
-#### `transformar_bcb(spark, paths)`
+#### `transformar_bcb(spark, storage_account)`
+
 Transforma dados Bronze do BCB para Silver.
 
 **Transformações:**
+
 - Parse de data (formato `dd/MM/yyyy` → `DateType`)
-- Cast de `valor` para `DoubleType` com arredondamento (4 casas)
+- Cast de `valor` para `DoubleType` (6 casas decimais)
 - Extração de `ano`, `mes`, `trimestre`
-- Filtro de nulos em `data` e `valor`
+- `dropDuplicates(["data", "indicador"])`
 
 **Particionamento Delta:** `indicador`, `ano`
 
@@ -238,116 +269,124 @@ Transforma dados Bronze do BCB para Silver.
 
 ### `src/transformation/silver_world_bank.py`
 
-#### `transformar_world_bank(spark, paths)`
+#### `transformar_world_bank(spark, storage_account)`
+
 Transforma dados Bronze do World Bank para Silver.
 
 **Transformações:**
-- Conversão de ano (string) para data (`yyyy-01-01`)
-- Cast de `valor` para `DoubleType` (4 casas decimais)
-- Filtro de nulos
 
-**Particionamento Delta:** `indicador`, `ano`
+- Compatível com schema antigo (`data`) e novo (`ano`)
+- Cast para `integer`
+- `mergeSchema: true` para compatibilidade
+
+**Retorno:** `int` — total de registros.
 
 ---
 
 ### `src/gold/anomalias.py`
 
-#### `detectar_anomalias(spark, paths)`
+#### `detectar_anomalias(spark, storage_account)`
+
 Detecta movimentos anômalos de mercado usando Z-Score por ação.
 
 **Algoritmo:**
+
 ```
-Para cada ação (janela particionada por ticker):
-  media    = AVG(variacao_pct)
-  desvio   = STDDEV(variacao_pct)
-  z_score  = (variacao_pct - media) / desvio
+Para cada ação (Window.partitionBy("ticker")):
+  media   = AVG(variacao_diaria_pct)
+  desvio  = STDDEV(variacao_diaria_pct)
+  zscore  = (variacao_diaria_pct - media) / desvio
 
 Classificação:
-  z_score >  2  → "Alta Anormal"
-  z_score < -2  → "Queda Anormal"
-  -2 ≤ z ≤ 2   → "Normal"
+  zscore >  2  → "Alta Anormal"
+  zscore < -2  → "Queda Anormal"
+  -2 ≤ z ≤ 2  → "Normal"
 ```
 
-**Colunas adicionadas:** `z_score`, `tipo_anomalia`, `is_anomalia`
+**Saída:** Delta em `gold/anomalias/`
 
-**Saída:** Delta em `paths["gold_anomalias"]`
-- Total: 4.014 registros
-- Anomalias: 213 (5,31%)
+- Total: ~4.524 registros
+- Anomalias: ~5,31%
 
 ---
 
 ### `src/gold/fraude.py`
 
-#### `detectar_fraude(spark, paths)`
-Avalia ordens de clientes com base em 4 regras de risco.
+#### `detectar_fraude(spark)`
 
-**Regras de detecção:**
+Avalia ordens via Unity Catalog com 4 regras de risco.
 
-| Regra | Critério | Coluna gerada |
+**Regras:**
+
+| Regra | Critério | Coluna |
 |---|---|---|
-| 1 | `valor_total > limite_operacional_cliente` | `alerta_limite` |
-| 2 | `quantidade > 9000` | `alerta_volume` |
-| 3 | `preco > 90 OR preco < 12` | `alerta_preco` |
-| 4 | Perfil incompatível com operação | `alerta_perfil` |
+| 1 | `valor_total > limite_operacional` | `alerta_valor_alto` |
+| 2 | `quantidade > 9000` | `alerta_volume_suspeito` |
+| 3 | `preco > 90 OR preco < 12` | `alerta_preco_atipico` |
+| 4 | Conservador + `valor_total > 200k` | `alerta_perfil_incompativel` |
 
 **Score final:**
-```
-total_alertas = soma das 4 regras
-score_fraude:
-  0 alertas → "Normal"
-  1 alerta  → "Médio"
-  2 alertas → "Alto"
-  3+ alertas → "Crítico"
 
+```
+0 alertas → "Normal"
+1 alerta  → "Médio"
+2 alertas → "Alto"
+3+ alertas → "Crítico"
 requer_revisao = (total_alertas >= 2)
 ```
 
-**Saída:** Delta em `paths["gold_deteccao_fraude"]`
-- Total: 5.445 ordens
-- Críticas: 302 (6%)
+**Saída:** `case_santander.gold.deteccao_fraude`
+
+- Total: ~5.341 ordens
+- Críticas: ~302 (6%)
 
 ---
 
 ### `src/gold/performance.py`
 
-#### `calcular_performance(spark, paths)`
+#### `calcular_performance(spark, storage_account)`
+
 Calcula métricas agregadas de performance por ação, setor e ano.
 
-**Métricas calculadas por (ticker, setor, ano):**
+**Métricas por (ticker, empresa, setor, ano):**
+
 ```
-preco_medio_fechamento   → AVG(close)
-preco_minimo             → MIN(low)
-preco_maximo             → MAX(high)
-variacao_media_pct       → AVG(variacao_pct)
-volatilidade             → STDDEV(variacao_pct)
-volume_medio             → AVG(volume)
-volume_total             → SUM(volume)
-dias_negociados          → COUNT(*)
+preco_medio, preco_minimo, preco_maximo
+variacao_media_pct, volatilidade (STDDEV)
+volume_medio, volume_total, dias_negociados
 ```
 
-**Saída:** Delta em `paths["gold_performance"]`
-- Total: 24 registros (9 ações × ~2-3 anos)
+**Saída:** Delta em `gold/performance_acoes/`
 
 ---
 
 ### `src/clients/sdc.py`
 
-#### `aplicar_sdc_clientes(spark, paths)`
-Aplica SCD Type 2 na dimensão de clientes.
+#### `aplicar_sdc_type2(spark, df_novos, tabela_uc, chave)`
+
+Aplica SCD Type 2 genérico em tabela Delta via Unity Catalog.
 
 **Lógica:**
+
 ```
-Para cada cliente novo ou com atributos alterados:
-  1. Registros existentes com mesmo id → data_fim = hoje, atual = False
-  2. Novo registro inserido             → data_inicio = hoje, atual = True
+Se tabela existe (DeltaTable.forName):
+  MERGE: registros com mesma chave e atual=true
+    → data_fim = hoje, atual = False
+  INSERT: novos registros com data_inicio=hoje, data_fim=9999-12-31, atual=True
 
-Campos rastreados: nome, perfil, saldo, score_credito, churn
+Se tabela não existe:
+  CREATE: primeira carga com campos SCD
 ```
 
-**Operação:** Delta Lake `MERGE` (upsert atômico)
+#### `aplicar_sdc_clientes(spark)`
 
-#### `aplicar_sdc_score_risco(spark, paths)`
-Aplica SCD Type 2 no histórico de scores de risco de clientes.
+Aplica SCD Type 2 em `case_santander.silver.clientes_sdc`.
+
+**Campos rastreados:** `perfil_risco`, `score_credito`, `faixa_saldo`, `churn`
+
+#### `aplicar_sdc_score_risco(spark)`
+
+Aplica SCD Type 2 em `case_santander.gold.score_risco_sdc`.
 
 **Campos rastreados:** `score_risco`, `categoria_risco`, `limite_operacional`
 
@@ -355,39 +394,79 @@ Aplica SCD Type 2 no histórico de scores de risco de clientes.
 
 ### `src/observability/monitoring.py`
 
-#### `executar_monitoramento(spark, paths)`
-Executa checagem de qualidade em todas as tabelas críticas do pipeline.
+#### `monitorar_tabela(spark, tabela_uc)`
 
-**Tabelas monitoradas:**
-```
-silver: acoes, bcb, world_bank, clientes, ordens
-gold:   anomalias, performance_acoes, deteccao_fraude,
-        score_risco_clientes, observabilidade
-```
+Monitora qualidade de uma tabela via Unity Catalog (sem path ADLS).
 
-**Métricas coletadas por tabela:**
+**Métricas coletadas:**
+
 ```
 total_registros     → COUNT(*)
-nulos_por_coluna    → COUNT(null) por cada coluna
-duplicatas          → COUNT(*) - COUNT(DISTINCT *)
-score_qualidade     → (1 - nulos / (total * num_colunas)) * 100
-tempo_processamento → duração da checagem
+total_nulos         → SUM de nulos por coluna
+total_duplicatas    → COUNT(*) - COUNT(DISTINCT *)
+qualidade_pct       → (1 - nulos / (total * colunas)) * 100
+tempo_seg           → duração da checagem
 ```
 
-**Regras de alerta:**
+**Alertas:**
+
 ```
-CRITICAL : score_qualidade < 95%
-WARNING  : duplicatas > 0
-ERROR    : total_registros == 0
+CRITICAL: qualidade_pct < 95%
+WARNING:  duplicatas > 0
+ERROR:    total_registros == 0
 ```
 
-**Saída:** Append em `paths["observabilidade"]` (tabela Gold)
+#### `executar_monitoramento(spark, storage_account=None)`
+
+Executa checagem em 9 tabelas críticas do pipeline via Unity Catalog.
+
+**Tabelas monitoradas:**
+
+```
+silver: acoes, bcb, world_bank, clientes, ordens
+gold:   anomalias, posicao_clientes, score_risco_clientes, deteccao_fraude
+```
+
+---
+
+### `jobs/job_corretora_analises.py`
+
+Notebook 11 refatorado. Executa:
+
+1. **Posição de carteira** → `gold.posicao_clientes`
+2. **Score de risco** → `gold.score_risco_clientes`
+3. **Perfil de clientes** → `gold.perfil_clientes`
+4. **Ordens consolidadas** → `gold.ordens_consolidadas`
+5. **Ranking ações** → `gold.ranking_acoes_perfil`
+6. **Carga SQL** → tabelas dbo.* no Azure SQL Database
+
+### `jobs/job_unity_catalog.py`
+
+Notebook 07 refatorado. Registra todas as tabelas Bronze e Gold no Unity Catalog:
+
+- Tabelas Bronze Parquet: acoes, bcb, world_bank, kafka
+- Tabelas Bronze Delta: clientes, ordens
+- Tabelas Gold Delta: performance_acoes, anomalias, acoes_vs_cambio
+
+### `jobs/job_lakehouse_monitoring.py`
+
+Notebook 12 refatorado. Cria/verifica monitores via `WorkspaceClient`:
+
+```python
+w.lakehouse_monitors.create(
+    full_name=tabela,
+    assets_dir=f"/Shared/monitoring/{tabela}",
+    output_schema_name="case_santander.gold",
+    snapshot={}
+)
+```
 
 ---
 
 ## 4. Dicionário de Dados
 
 ### Bronze: `acoes`
+
 | Coluna | Tipo | Descrição |
 |---|---|---|
 | ticker | string | Código da ação (ex: PETR4.SA) |
@@ -397,88 +476,244 @@ ERROR    : total_registros == 0
 | low | double | Preço mínimo do dia |
 | close | double | Preço de fechamento |
 | volume | long | Volume negociado |
-| adjclose | double | Preço de fechamento ajustado |
-| extraction_timestamp | timestamp | Data/hora da extração |
+| data_extracao | string | Data de execução do job |
 
-### Silver: `acoes`
+### Bronze: `clientes`
+
 | Coluna | Tipo | Descrição |
 |---|---|---|
-| ticker | string | Código sem sufixo .SA |
+| id_cliente | string | ID prefixado CLI + CustomerId |
+| hash_cliente | string | SHA-256 do CustomerId (16 chars) — LGPD |
+| sobrenome_masked | string | Primeira letra + asteriscos — LGPD |
+| score_credito | int | Credit score (300-850) |
+| pais | string | País do cliente |
+| genero | string | Gênero |
+| idade | int | Idade |
+| anos_cliente | int | Anos como cliente |
+| saldo | double | Saldo em conta |
+| faixa_saldo | string | Sem saldo / Baixo / Medio / Alto |
+| num_produtos | int | Número de produtos contratados |
+| perfil_risco | string | Conservador / Moderado / Arrojado |
+| ativo | boolean | Membro ativo |
+| churn | boolean | Se saiu do banco |
+| salario_estimado | double | Salário estimado |
+| data_extracao | string | Data de extração |
+
+### Bronze: `ordens`
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| id_ordem | string | ID único da ordem |
+| hash_cliente | string | SHA-256 do cliente — LGPD |
+| perfil_risco | string | Perfil do cliente |
+| faixa_saldo | string | Faixa de saldo do cliente |
+| ticker | string | Ação negociada |
+| preco | double | Preço unitário |
+| quantidade | long | Quantidade de ações |
+| valor_total | double | Valor total da ordem |
+| tipo | string | compra / venda |
+| corretora | string | Santander Corretora |
+| status | string | executada / cancelada / pendente |
+| data_ordem | string | Data da ordem |
+| data_extracao | string | Data de extração |
+
+### Silver: `acoes`
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| ticker | string | Código da ação |
 | date | date | Data do pregão |
-| open / high / low / close / volume | double/long | OHLCV |
-| variacao_pct | double | Variação percentual diária |
-| amplitude | double | Diferença high - low |
+| open / high / low / close | double | Preços OHLC |
+| volume | long | Volume negociado |
+| variacao_diaria_pct | double | (close - open) / open * 100 |
+| amplitude_diaria | double | high - low |
 | empresa | string | Nome da empresa |
-| setor | string | Setor B3 |
+| setor | string | Setor B3 (Financeiro, Commodities etc.) |
 | ano / mes / trimestre | int | Decomposição temporal |
+| data_processamento | string | Data do processamento |
 
 ### Silver: `bcb`
+
 | Coluna | Tipo | Descrição |
 |---|---|---|
 | data | date | Data da observação |
-| valor | double | Valor do indicador (4 casas) |
-| indicador | string | selic / cambio / ipca |
+| valor | double | Valor do indicador (6 casas) |
+| indicador | string | selic / cambio_usd_brl / ipca |
 | ano / mes / trimestre | int | Decomposição temporal |
+| data_processamento | string | Data do processamento |
 
 ### Silver: `world_bank`
+
 | Coluna | Tipo | Descrição |
 |---|---|---|
-| data | date | Ano de referência (formato yyyy-01-01) |
+| ano | int | Ano de referência |
 | valor | double | Valor do indicador (4 casas) |
-| indicador | string | pib / desemprego |
-| ano | int | Ano extraído |
+| indicador | string | pib_anual / desemprego |
+| data_extracao | string | Data de extração |
+| fonte | string | world_bank |
+| data_processamento | string | Data do processamento |
 
-### Gold: `anomalias`
+### Silver: `clientes`
+
 | Coluna | Tipo | Descrição |
 |---|---|---|
-| (colunas silver acoes) | — | Herdadas da Silver |
-| z_score | double | Z-Score da variação diária |
-| tipo_anomalia | string | Normal / Alta Anormal / Queda Anormal |
-| is_anomalia | boolean | True se |z_score| > 2 |
+| (colunas bronze clientes) | — | Herdadas do Bronze |
+| faixa_etaria | string | Jovem / Adulto / Senior |
+| score_categoria | string | Excelente / Bom / Regular / Ruim |
+| data_processamento | string | Data do processamento |
 
-### Gold: `deteccao_fraude`
+### Silver: `ordens`
+
 | Coluna | Tipo | Descrição |
 |---|---|---|
-| id_ordem | string | Identificador da ordem |
-| id_cliente | string | ID pseudonimizado (SHA-256) |
+| (colunas bronze ordens) | — | Herdadas do Bronze |
+| data_ordem | date | Data da ordem (tipada) |
+| ano | int | Ano da ordem |
+| mes | int | Mês da ordem |
+| data_processamento | string | Data do processamento |
+
+### Silver: `streaming`
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| timestamp | timestamp | Timestamp da transação |
 | ticker | string | Ação negociada |
-| quantidade | int | Quantidade de ações |
-| preco | double | Preço unitário |
-| valor_total | double | Valor total da ordem |
-| alerta_limite | int | 0 ou 1 — regra de limite |
-| alerta_volume | int | 0 ou 1 — regra de volume |
-| alerta_preco | int | 0 ou 1 — regra de preço |
-| alerta_perfil | int | 0 ou 1 — regra de perfil |
-| total_alertas | int | Soma dos alertas |
-| score_fraude | string | Normal / Médio / Alto / Crítico |
-| requer_revisao | boolean | True se total_alertas >= 2 |
+| preco | double | Preço |
+| quantidade | long | Quantidade |
+| tipo | string | compra / venda |
+| corretora | string | Corretora |
+| id_transacao | string | ID único |
+| hora / minuto | int | Decomposição temporal |
+| valor_total | double | preco * quantidade |
+| alerta_volume | string | Normal / Volume Medio / Volume Alto |
+| alerta_preco | string | Normal / Preco Alto / Preco Baixo |
+| processado_em | string | Timestamp de processamento |
 
-### Gold: `score_risco_clientes`
+### Silver: `clientes_sdc` (SDC Type 2)
+
 | Coluna | Tipo | Descrição |
 |---|---|---|
-| id_cliente | string | ID pseudonimizado |
-| score_credito | double | Componente de crédito (peso 0.4) |
-| score_perfil | double | Componente de perfil (peso 0.2) |
-| score_saldo | double | Componente de saldo (peso 0.2) |
-| score_comportamento | double | Componente comportamental (peso 0.2) |
-| score_risco | double | Score final ponderado [0, 1] |
-| categoria_risco | string | Baixo / Moderado / Alto |
-| limite_operacional | double | Limite em R$ conforme categoria |
-| data_inicio | date | Início de vigência (SCD Type 2) |
-| data_fim | date | Fim de vigência (null se atual) |
+| (colunas silver clientes selecionadas) | — | Snapshot dos atributos |
+| data_inicio | string | Início de vigência do registro |
+| data_fim | string | Fim de vigência (9999-12-31 se atual) |
 | atual | boolean | True se registro vigente |
 
-### Gold: `observabilidade`
+### Gold: `anomalias`
+
 | Coluna | Tipo | Descrição |
 |---|---|---|
+| date | date | Data do pregão |
+| ticker | string | Código da ação |
+| empresa | string | Nome da empresa |
+| setor | string | Setor B3 |
+| open / close | double | Preços |
+| volume | long | Volume |
+| variacao_diaria_pct | double | Variação % do dia |
+| zscore | double | Z-Score da variação |
+| anomalia | boolean | True se |zscore| > 2 |
+| tipo_anomalia | string | Normal / Alta Anormal / Queda Anormal |
+| data_processamento | string | Data do processamento |
+
+### Gold: `posicao_clientes`
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| hash_cliente | string | ID pseudonimizado |
+| ticker | string | Ação |
+| quantidade_liquida | long | Compras - Vendas |
+| total_comprado | double | Total comprado |
+| total_vendido | double | Total vendido |
+| valor_investido | double | total_comprado - total_vendido |
+| resultado_estimado | double | total_vendido - total_comprado |
+| total_ordens | long | Total de ordens |
+| ordens_executadas | long | Ordens executadas |
+| ordens_canceladas | long | Ordens canceladas |
+| situacao | string | Comprado / Vendido a Descoberto / Zerado |
+| perfil_risco | string | Perfil do cliente |
+| faixa_saldo | string | Faixa de saldo |
+| score_credito | int | Score de crédito |
+| data_processamento | string | Data do processamento |
+
+### Gold: `score_risco_clientes`
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| hash_cliente | string | ID pseudonimizado |
+| perfil_risco | string | Conservador / Moderado / Arrojado |
+| score_credito | int | Score de crédito do cliente |
+| score_credito_norm | double | Score normalizado (0-100) |
+| score_perfil | double | Pontuação por perfil |
+| score_saldo | double | Pontuação por saldo |
+| score_comportamento | double | Pontuação por comportamento |
+| score_risco | double | Score final ponderado |
+| categoria_risco | string | Baixo Risco / Risco Moderado / Risco Alto |
+| limite_operacional | double | Limite em R$ |
+| num_ativos | long | Número de ativos na carteira |
+| total_ordens | long | Total de ordens |
+| taxa_cancelamento_pct | double | % de ordens canceladas |
+| data_processamento | string | Data do processamento |
+
+### Gold: `score_risco_sdc` (SDC Type 2)
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| hash_cliente | string | ID pseudonimizado |
+| score_risco | double | Score no período |
+| categoria_risco | string | Categoria no período |
+| limite_operacional | double | Limite no período |
+| data_inicio | string | Início de vigência |
+| data_fim | string | Fim de vigência |
+| atual | boolean | True se vigente |
+
+### Gold: `deteccao_fraude`
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| hash_cliente | string | ID pseudonimizado |
+| ticker | string | Ação negociada |
+| valor_total | double | Valor da ordem |
+| quantidade | long | Quantidade |
+| preco | double | Preço |
+| perfil_risco | string | Perfil do cliente |
+| score_risco | double | Score de risco |
+| categoria_risco | string | Categoria de risco |
+| limite_operacional | double | Limite operacional |
+| alerta_valor_alto | boolean | Valor acima do limite |
+| alerta_volume_suspeito | boolean | Quantidade > 9.000 |
+| alerta_preco_atipico | boolean | Preço fora do range |
+| alerta_perfil_incompativel | boolean | Conservador + valor alto |
+| total_alertas | int | Soma dos alertas |
+| score_fraude | string | Normal / Medio / Alto / Critico |
+| requer_revisao | boolean | total_alertas >= 2 |
+| data_processamento | string | Data do processamento |
+
+### Gold: `perfil_clientes`
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| perfil_risco | string | Perfil de risco |
+| faixa_etaria | string | Jovem / Adulto / Senior |
+| score_categoria | string | Categoria do score |
+| pais | string | País do cliente |
+| total_clientes | long | Contagem |
+| saldo_medio | double | Saldo médio |
+| score_medio | double | Score médio |
+| salario_medio | double | Salário estimado médio |
+| total_churn | long | Total com churn |
+| taxa_churn_pct | double | Taxa de churn % |
+
+### Gold: `observabilidade`
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| camada | string | bronze / silver / gold |
 | tabela | string | Nome da tabela monitorada |
+| data_verificacao | string | Data da execução |
 | total_registros | long | Contagem total |
-| score_qualidade | double | Percentual de qualidade [0, 100] |
-| nulos_total | long | Total de valores nulos |
-| duplicatas | long | Total de registros duplicados |
-| alertas | string | JSON com lista de alertas |
-| tempo_processamento_s | double | Duração da checagem em segundos |
-| timestamp_monitoramento | timestamp | Data/hora da execução |
+| total_nulos | long | Total de valores nulos |
+| total_duplicatas | long | Total de duplicatas |
+| qualidade_pct | double | Score de qualidade [0, 100] |
+| tempo_seg | double | Duração da checagem |
 
 ---
 
@@ -487,47 +722,77 @@ ERROR    : total_registros == 0
 ### Detecção de Anomalias (Z-Score)
 
 ```
-Para cada ação i no ticker t:
-  μ_t  = média de variacao_pct de todos os dias de t
-  σ_t  = desvio padrão de variacao_pct de t
-  z_i  = (variacao_pct_i - μ_t) / σ_t
+Para cada ação i no ticker t (Window.partitionBy("ticker")):
+  μ_t  = AVG(variacao_diaria_pct)
+  σ_t  = STDDEV(variacao_diaria_pct)
+  z_i  = (variacao_diaria_pct_i - μ_t) / σ_t
 
-Critério:
-  |z_i| > 2  → Anomalia (±2σ cobre ~95.4% da distribuição normal)
+Critério (±2σ cobre ~95.4% da distribuição normal):
+  z_i >  2  → "Alta Anormal"
+  z_i < -2  → "Queda Anormal"
+  |z_i| ≤ 2 → "Normal"
 ```
-
-**Resultado observado:**
-- Anomalias detectadas: 213 de 4.014 (5,31%)
-- Distribuição: Alta Anormal e Queda Anormal por ticker
 
 ### Score de Risco de Clientes
 
 ```
-score_risco = (score_credito   × 0.4)
-            + (score_perfil    × 0.2)
-            + (score_saldo     × 0.2)
-            + (score_comportamento × 0.2)
+score_credito_norm = score_credito / 850 * 100
+
+score_perfil:
+  Arrojado   → 100
+  Moderado   → 60
+  Conservador → 30
+
+score_saldo:
+  Alto    → 100
+  Medio   → 60
+  Baixo   → 30
+  Sem saldo → 10
+
+score_comportamento:
+  taxa_cancelamento < 20% → 100
+  taxa_cancelamento < 50% → 60
+  taxa_cancelamento >= 50% → 20
+
+score_risco = (score_credito_norm  * 0.4)
+            + (score_perfil        * 0.2)
+            + (score_saldo         * 0.2)
+            + (score_comportamento * 0.2)
 
 Categorização:
-  score > 0.70  → "Baixo Risco"   → limite R$ 500.000
-  score ∈ [0.5, 0.70] → "Moderado" → limite R$ 200.000
-  score < 0.50  → "Alto Risco"    → limite R$  50.000
+  score >= 70 → "Baixo Risco"    → limite R$ 500.000
+  score >= 50 → "Risco Moderado" → limite R$ 200.000
+  score >= 30 → "Risco Alto"     → limite R$  50.000
+  score < 30  → "Risco Critico"  → limite R$  10.000
 ```
 
-**Resultado observado (amostra de 1.000 clientes):**
+**Resultado observado (1.000 clientes):**
+
 - Baixo Risco: 304 (30,4%)
 - Risco Moderado: 534 (53,4%)
-- Alto Risco: 162 (16,2%)
+- Risco Alto: 162 (16,2%)
 
 ### Score de Qualidade de Dados
 
 ```
-score_qualidade = (1 - nulos / (total_registros × num_colunas)) × 100
+score_qualidade = (1 - total_nulos / (total_registros × num_colunas)) × 100
 
 Alertas:
-  score < 95%  → CRITICAL
+  score < 95%    → CRITICAL
   duplicatas > 0 → WARNING
-  total == 0   → ERROR
+  total == 0     → ERROR
+```
+
+### SDC Type 2 — Chaveamento Temporal
+
+```
+Para cada execução diária:
+  1. MERGE: registros com mesma chave e atual=True
+     → SET data_fim = hoje, atual = False
+  2. INSERT: novo snapshot com
+     → data_inicio = hoje
+     → data_fim = '9999-12-31'
+     → atual = True
 ```
 
 ---
@@ -536,489 +801,233 @@ Alertas:
 
 ### 6.1 Yahoo Finance — `yfinance`
 
-**Tipo:** Biblioteca Python (wrapper sobre a API não-oficial do Yahoo Finance)  
-**Autenticação:** Nenhuma (pública, sem API key)  
-**Arquivo:** [src/ingestion/yahoo_finance.py](../src/ingestion/yahoo_finance.py)
-
-#### Como é utilizada
+**Tipo:** Biblioteca Python  
+**Autenticação:** Nenhuma  
+**Arquivo:** `src/ingestion/yahoo_finance.py`
 
 ```python
 import yfinance as yf
-
 ticker = yf.Ticker("PETR4.SA")
 df = ticker.history(period="2y")
 ```
 
-#### Parâmetros utilizados
+| Parâmetro | Valor |
+|---|---|
+| `period` | `"2y"` — 2 anos de histórico |
+| Ticker format | `"<CÓDIGO>.SA"` — sufixo B3 |
 
-| Parâmetro | Valor | Descrição |
-|---|---|---|
-| `period` | `"2y"` | Histórico dos últimos 2 anos |
-| Ticker format | `"<CÓDIGO>.SA"` | Sufixo `.SA` identifica ações da B3 (Bovespa) |
+### 6.2 Banco Central do Brasil — SGS
 
-#### Ações monitoradas
-
-| Ticker | Empresa | Setor |
-|---|---|---|
-| `PETR4.SA` | Petrobras | Energia |
-| `VALE3.SA` | Vale | Mineração |
-| `ITUB4.SA` | Itaú Unibanco | Financeiro |
-| `BBDC4.SA` | Bradesco | Financeiro |
-| `ABEV3.SA` | Ambev | Consumo |
-| `MGLU3.SA` | Magazine Luiza | Varejo |
-| `WEGE3.SA` | WEG | Industrial |
-| `BBAS3.SA` | Banco do Brasil | Financeiro |
-| `SANB11.SA` | Santander BR | Financeiro |
-
-#### Campos retornados por `ticker.history()`
-
-| Campo | Tipo Python | Descrição |
-|---|---|---|
-| `Date` (index) | `DatetimeIndex` | Data do pregão |
-| `Open` | `float` | Preço de abertura (BRL) |
-| `High` | `float` | Preço máximo do dia (BRL) |
-| `Low` | `float` | Preço mínimo do dia (BRL) |
-| `Close` | `float` | Preço de fechamento (BRL) |
-| `Volume` | `int` | Volume de ações negociadas |
-| `Dividends` | `float` | Dividendos pagos no dia |
-| `Stock Splits` | `float` | Desdobramentos de ações |
-
-> Os campos `Dividends` e `Stock Splits` são descartados na transformação Silver.
-
-#### Tratamento de erros
-
-Cada ação é extraída individualmente em um `try/except`. Falha em uma ação não interrompe as demais — o erro é logado e o loop continua.
-
----
-
-### 6.2 Banco Central do Brasil (BCB) — API SGS
-
-**Tipo:** REST API pública  
-**Autenticação:** Nenhuma (pública, sem API key)  
 **Base URL:** `https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados`  
-**Arquivo:** [src/ingestion/bcb.py](../src/ingestion/bcb.py)
+**Autenticação:** Nenhuma
 
-#### Endpoints utilizados
-
-##### Selic — Taxa de Juros (diária)
-
-```
-GET https://api.bcb.gov.br/dados/serie/bcdata.sgs.11/dados
-    ?formato=json
-    &dataInicial=01/04/2021
-    &dataFinal=01/04/2026
-```
-
-| Parâmetro | Valor | Descrição |
+| Indicador | Código | Endpoint |
 |---|---|---|
-| Código SGS | `11` | Série histórica da taxa Selic |
-| `formato` | `json` | Formato da resposta |
-| `dataInicial` | `01/04/2021` | Início do período (dd/MM/yyyy) |
-| `dataFinal` | `01/04/2026` | Fim do período (dd/MM/yyyy) |
+| Selic | 11 | `.../bcdata.sgs.11/dados?formato=json&dataInicial=...` |
+| Câmbio | 1 | `.../bcdata.sgs.1/dados?formato=json&dataInicial=...` |
+| IPCA | 433 | `.../bcdata.sgs.433/dados?formato=json` |
 
-**Resposta (exemplo):**
-```json
-[
-  { "data": "01/04/2021", "valor": "2.75" },
-  { "data": "02/04/2021", "valor": "2.75" }
-]
-```
-
-##### Câmbio USD/BRL (diário)
-
-```
-GET https://api.bcb.gov.br/dados/serie/bcdata.sgs.1/dados
-    ?formato=json
-    &dataInicial=01/04/2021
-    &dataFinal=01/04/2026
-```
-
-| Parâmetro | Valor | Descrição |
-|---|---|---|
-| Código SGS | `1` | Taxa de câmbio dólar/real (PTAX) |
-| `formato` | `json` | Formato da resposta |
-
-**Resposta (exemplo):**
-```json
-[
-  { "data": "01/04/2021", "valor": "5.6980" },
-  { "data": "05/04/2021", "valor": "5.7030" }
-]
-```
-
-##### IPCA — Inflação (mensal)
-
-```
-GET https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados
-    ?formato=json
-```
-
-| Parâmetro | Valor | Descrição |
-|---|---|---|
-| Código SGS | `433` | Índice de Preços ao Consumidor Amplo |
-| `formato` | `json` | Formato da resposta |
-| Período | Sem filtro | Retorna toda a série histórica disponível |
-
-**Resposta (exemplo):**
-```json
-[
-  { "data": "01/2021", "valor": "0.25" },
-  { "data": "02/2021", "valor": "0.86" }
-]
-```
-
-#### Campos comuns após normalização
-
-| Campo original | Campo normalizado | Tipo | Descrição |
-|---|---|---|---|
-| `data` | `data` | `str` (dd/MM/yyyy) | Data da observação |
-| `valor` | `valor` | `float` | Valor do indicador |
-| — | `indicador` | `str` | `selic`, `cambio_usd_brl` ou `ipca` |
-| — | `data_extracao` | `str` | Data de execução do job |
-
-#### Configurações de requisição
-
-```python
-requests.get(url, timeout=10)  # timeout de 10 segundos por chamada
-```
-
----
+> **Nota sobre particionamento:** Os dados BCB usam `extracao=` como partição (não `data=`) para evitar conflito com a coluna `data` dos indicadores.
 
 ### 6.3 World Bank — Data API v2
 
-**Tipo:** REST API pública  
-**Autenticação:** Nenhuma (pública, sem API key)  
 **Base URL:** `https://api.worldbank.org/v2/country/BR/indicator/{indicator}`  
-**Arquivo:** [src/ingestion/world_bank.py](../src/ingestion/world_bank.py)
+**Autenticação:** Nenhuma
 
-#### Endpoints utilizados
-
-##### PIB — Crescimento anual do GDP
-
-```
-GET https://api.worldbank.org/v2/country/BR/indicator/NY.GDP.MKTP.KD.ZG
-    ?format=json
-    &per_page=30
-```
-
-| Parâmetro | Valor | Descrição |
-|---|---|---|
-| Indicador | `NY.GDP.MKTP.KD.ZG` | GDP growth (annual %) |
-| `format` | `json` | Formato da resposta |
-| `per_page` | `30` | Últimos 30 anos de dados |
-
-##### Desemprego — Taxa anual
-
-```
-GET https://api.worldbank.org/v2/country/BR/indicator/SL.UEM.TOTL.ZS
-    ?format=json
-    &per_page=30
-```
-
-| Parâmetro | Valor | Descrição |
-|---|---|---|
-| Indicador | `SL.UEM.TOTL.ZS` | Unemployment, total (% of total labor force) |
-| `format` | `json` | Formato da resposta |
-| `per_page` | `30` | Últimos 30 anos de dados |
-
-#### Estrutura da resposta
-
-A API retorna uma lista com dois elementos:
-
-```json
-[
-  { "page": 1, "pages": 1, "per_page": 30, "total": 30 },
-  [
-    { "date": "2023", "value": 2.9, "country": { "id": "BR", "value": "Brazil" } },
-    { "date": "2022", "value": 3.0, "country": { "id": "BR", "value": "Brazil" } }
-  ]
-]
-```
-
-O código acessa `response.json()[1]` para obter o array de registros. Registros com `value: null` são descartados na extração.
-
-#### Campos extraídos
-
-| Campo | Tipo | Descrição |
-|---|---|---|
-| `date` | `str` (yyyy) | Ano de referência |
-| `value` | `float` | Valor do indicador (percentual) |
-| — | `indicador` | `pib_anual` ou `desemprego` |
-| — | `data_extracao` | Data de execução |
-| — | `fonte` | `"world_bank"` |
-
-#### Configurações de requisição
-
-```python
-requests.get(url, timeout=10)  # timeout de 10 segundos por chamada
-```
-
----
-
-### 6.4 Azure Event Hub — Apache Kafka Protocol
-
-**Tipo:** Streaming (mensageria compatível com Kafka)  
-**Autenticação:** Connection String (SASL/SSL) armazenada no Key Vault  
-**Secret Key Vault:** `eventhub-connection-string`  
-**Arquivo:** [src/streaming/\_\_init\_\_.py](../src/streaming/__init__.py)
-
-#### Configuração do Consumer (Kafka)
-
-```python
-from azure.eventhub import EventHubConsumerClient
-
-client = EventHubConsumerClient.from_connection_string(
-    conn_str=eventhub_connection_string,
-    consumer_group="$Default",
-    eventhub_name="transacoes-financeiras"
-)
-```
-
-#### Tópico / Event Hub
-
-| Propriedade | Valor |
+| Indicador | Código |
 |---|---|
-| Namespace | `evhcasesantander` |
-| Event Hub | `transacoes-financeiras` |
-| Consumer Group | `$Default` |
-| Protocolo | AMQP / Kafka compatível |
+| PIB (crescimento anual %) | `NY.GDP.MKTP.KD.ZG` |
+| Desemprego (% força de trabalho) | `SL.UEM.TOTL.ZS` |
 
-#### Schema das mensagens (JSON)
+**Tratamento de vazio:** Se API retornar dataset vazio, a função retorna 0 sem lançar exceção.
 
-```json
-{
-  "orderId":    "string — UUID da ordem",
-  "customerId": "string — ID do cliente",
-  "ticker":     "string — código da ação",
-  "quantity":   "int    — quantidade de ações",
-  "price":      "float  — preço unitário",
-  "value":      "float  — valor total",
-  "timestamp":  "string — ISO 8601"
-}
-```
+### 6.4 Kaggle — Dataset Bank Customer Churn
 
-#### Saída no Bronze
-
-Os eventos são gravados em:
-```
-abfss://bronze@stcasesantander.dfs.core.windows.net/kafka/data={data_hoje}/
-```
-
-Volume estimado: ~200 eventos por lote de ingestão.
-
----
-
-### 6.5 Azure Key Vault — Secrets API
-
-**Tipo:** Azure SDK via `dbutils.secrets`  
-**Autenticação:** Databricks Secret Scope vinculado ao Key Vault  
-**Arquivo:** [src/config/settings.py](../src/config/settings.py)
-
-#### Como é utilizado
+**Dataset:** `mathchi/churn-for-bank-customers`  
+**Autenticação:** API Key via Key Vault (`kaggle-username`, `kaggle-key`)
 
 ```python
-def get_credentials(dbutils):
-    return {
-        "client_id":       dbutils.secrets.get(scope="kv-case-santander", key="client-id"),
-        "tenant_id":       dbutils.secrets.get(scope="kv-case-santander", key="tenant-id"),
-        "client_secret":   dbutils.secrets.get(scope="kv-case-santander", key="client-secret"),
-        "storage_account": dbutils.secrets.get(scope="kv-case-santander", key="storage-account"),
-        "sql_conn":        dbutils.secrets.get(scope="kv-case-santander", key="sql-connection-string"),
-        "kaggle_username": dbutils.secrets.get(scope="kv-case-santander", key="kaggle-username"),
-        "kaggle_key":      dbutils.secrets.get(scope="kv-case-santander", key="kaggle-key"),
-    }
+url = "https://www.kaggle.com/api/v1/datasets/download/mathchi/churn-for-bank-customers"
+response = requests.get(url, auth=(kaggle_username, kaggle_key), stream=True)
 ```
 
-#### Segredos registrados
+**Dados:** 10.000 clientes bancários reais anonimizados com atributos de crédito, saldo e churn.
 
-| Key no Key Vault | Usado em | Descrição |
-|---|---|---|
-| `client-id` | `configure_adls()` | App ID do Service Principal |
-| `tenant-id` | `configure_adls()` | Azure AD Tenant ID |
-| `client-secret` | `configure_adls()` | Credencial do Service Principal |
-| `storage-account` | `get_paths()` | Nome da conta ADLS Gen2 |
-| `eventhub-connection-string` | Streaming consumer | Conexão Event Hub |
-| `sql-connection-string` | Carga SQL | Conexão Azure SQL Database |
-| `kaggle-username` | Ingestão clientes | Autenticação Kaggle API |
-| `kaggle-key` | Ingestão clientes | Chave Kaggle API |
+**LGPD aplicada na extração:**
+- `CustomerId` → `hash_cliente` (SHA-256, 16 chars)
+- `Surname` → `sobrenome_masked` (primeira letra + asteriscos)
 
-> Nenhum segredo é exposto em código ou variável de ambiente. Todos os valores são lidos em tempo de execução via `dbutils.secrets`.
+### 6.5 Azure Event Hub — Kafka Protocol
 
----
+**Namespace:** `evhcasesantander`  
+**Event Hub:** `transacoes-financeiras`  
+**Autenticação:** Connection String via Key Vault
 
-### 6.6 Azure ADLS Gen2 — OAuth2 / Service Principal
+**Structured Streaming via arquivos:**
+- Producer grava Parquet em `bronze/kafka/`
+- Consumer usa `readStream.format("parquet")` com `.trigger(availableNow=True)`
+- Saída em `silver/streaming/` como Delta Lake
 
-**Tipo:** Protocolo de autenticação (não é uma API de dados)  
-**Autenticação:** OAuth2 Client Credentials (Service Principal)  
-**Arquivo:** [src/config/settings.py](../src/config/settings.py)
+### 6.6 Azure Key Vault
 
-#### Configuração na SparkSession
+**Secret Scope:** `kv-case-santander`
 
-```python
-def configure_adls(spark, storage_account, client_id, tenant_id, client_secret):
-    spark.conf.set(
-        f"fs.azure.account.auth.type.{storage_account}.dfs.core.windows.net",
-        "OAuth"
-    )
-    spark.conf.set(
-        f"fs.azure.account.oauth.provider.type.{storage_account}.dfs.core.windows.net",
-        "org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider"
-    )
-    spark.conf.set(
-        f"fs.azure.account.oauth2.client.id.{storage_account}.dfs.core.windows.net",
-        client_id
-    )
-    spark.conf.set(
-        f"fs.azure.account.oauth2.client.secret.{storage_account}.dfs.core.windows.net",
-        client_secret
-    )
-    spark.conf.set(
-        f"fs.azure.account.oauth2.client.endpoint.{storage_account}.dfs.core.windows.net",
-        f"https://login.microsoftonline.com/{tenant_id}/oauth2/token"
-    )
-```
-
-#### Token endpoint
-
-```
-POST https://login.microsoftonline.com/{tenant_id}/oauth2/token
-```
-
-| Parâmetro | Valor |
+| Key | Uso |
 |---|---|
-| `grant_type` | `client_credentials` |
-| `client_id` | ID do Service Principal |
-| `client_secret` | Segredo do Service Principal |
-| `resource` | `https://storage.azure.com/` |
-
-O Hadoop ABFS driver gerencia o ciclo de vida do token (obtenção, cache e renovação) automaticamente a partir da configuração acima.
-
-#### Permissão necessária no ADLS
-
-O Service Principal deve ter a role **Storage Blob Data Contributor** no storage account `stcasesantander`.
-
----
-
-### Resumo das APIs
-
-| API | Tipo | Auth | Volume | Frequência |
-|---|---|---|---|---|
-| Yahoo Finance (`yfinance`) | Biblioteca Python | Nenhuma | ~445 registros/ação | Diária |
-| BCB SGS — Selic (código 11) | REST GET | Nenhuma | ~1.300 registros | Diária |
-| BCB SGS — Câmbio (código 1) | REST GET | Nenhuma | ~1.300 registros | Diária |
-| BCB SGS — IPCA (código 433) | REST GET | Nenhuma | ~467 registros | Mensal |
-| World Bank — PIB | REST GET | Nenhuma | ~30 registros | Anual |
-| World Bank — Desemprego | REST GET | Nenhuma | ~29 registros | Anual |
-| Azure Event Hub (Kafka) | Streaming AMQP | Connection String | ~200 eventos/lote | Tempo real |
-| Azure Key Vault | SDK Databricks | Secret Scope | — | Por execução |
-| Azure ADLS Gen2 | OAuth2 ABFS | Service Principal | — | Por execução |
+| `client-id` | Service Principal — autenticação ADLS |
+| `tenant-id` | Azure AD Tenant |
+| `client-secret` | Credencial Service Principal |
+| `storage-account` | Nome da conta ADLS Gen2 |
+| `eventhub-connection-string` | Conexão Event Hub |
+| `sql-connection-string` | Conexão Azure SQL Database |
+| `kaggle-username` | Autenticação Kaggle API |
+| `kaggle-key` | Chave Kaggle API |
 
 ---
 
 ## 7. Configuração e Dependências
 
-
-
-### Variáveis de Configuração (`config/config.py`)
+### Variáveis em `config/config.py`
 
 | Variável | Valor | Descrição |
 |---|---|---|
-| `STORAGE_ACCOUNT` | `stcasesantander` | Nome da conta ADLS Gen2 |
-| `EVENTHUB_NAMESPACE` | `evhcasesantander` | Namespace do Event Hub |
-| `SQL_SERVER` | `sqlsrvcasesantander` | Servidor Azure SQL |
-| `DATABRICKS_CATALOG` | `case_santander` | Unity Catalog principal |
-| `BRONZE_SCHEMA` | `bronze` | Schema da camada Bronze |
-| `SILVER_SCHEMA` | `silver` | Schema da camada Silver |
-| `GOLD_SCHEMA` | `gold` | Schema da camada Gold |
+| `STORAGE_ACCOUNT` | `stcasesantander` | Conta ADLS Gen2 |
+| `EVENTHUB_NAME` | `transacoes-financeiras` | Event Hub |
+| `SQL_SERVER` | `sqlsvr-case-santander.database.windows.net` | Azure SQL |
+| `SQL_DATABASE` | `sqldb-case-santander` | Banco de dados |
+| `CATALOG` | `case_santander` | Unity Catalog |
+| `ACOES` | Lista de 9 tickers | Ações B3 monitoradas |
 
-### Segredos no Key Vault (`kv-case-santander`)
+### Cluster Databricks
 
-| Secret Name | Uso |
+| Propriedade | Valor |
 |---|---|
-| `client-id` | Service Principal — autenticação ADLS |
-| `tenant-id` | Azure AD Tenant |
-| `client-secret` | Service Principal — credencial |
-| `storage-account` | Nome da conta de armazenamento |
-| `eventhub-connection-string` | Conexão Event Hub (Kafka) |
-| `sql-connection-string` | Conexão Azure SQL Database |
-| `kaggle-username` | Autenticação Kaggle API |
-| `kaggle-key` | Chave Kaggle API |
+| Nome | `cluster-case-santander` |
+| Runtime | 15.4 LTS (Spark 3.5.0, Scala 2.12) |
+| Node | Standard_D4pds_v6 (16 GB, 4 Cores) |
+| Auto-termination | 20 minutos |
+| Cluster ID | `0401-150803-wefgy1hc` |
 
-### Dependências Python (`requirements.txt`)
+**Configuração Spark (Advanced):**
 
 ```
-yfinance==0.2.37           # Dados de ações via Yahoo Finance
-requests==2.31.0           # Chamadas REST (BCB, World Bank)
-azure-eventhub==5.15.1     # Consumer Kafka/Event Hub
-databricks-cli==0.18.0     # Upload de arquivos ao workspace
-databricks-connect==15.4   # SparkSession remota
-databricks-sdk>=0.20.0     # API REST do Databricks
-pytest>=7.4.0              # Framework de testes
+spark.databricks.delta.schema.autoMerge.enabled true
+spark.hadoop.fs.azure.account.auth.type.stcasesantander.dfs.core.windows.net OAuth
+spark.hadoop.fs.azure.account.oauth.provider.type.stcasesantander.dfs.core.windows.net org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider
+spark.hadoop.fs.azure.account.oauth2.client.id.stcasesantander.dfs.core.windows.net {{secrets/kv-case-santander/client-id}}
+spark.hadoop.fs.azure.account.oauth2.client.secret.stcasesantander.dfs.core.windows.net {{secrets/kv-case-santander/client-secret}}
+spark.hadoop.fs.azure.account.oauth2.client.endpoint.stcasesantander.dfs.core.windows.net https://login.microsoftonline.com/{tenant_id}/oauth2/token
+```
+
+**Bibliotecas instaladas no cluster:**
+
+```
+yfinance, requests, azure-eventhub
+```
+
+### `requirements.txt`
+
+```
+yfinance>=0.2.37
+requests>=2.31.0
+azure-eventhub>=5.15.1
+databricks-connect==15.4
+databricks-sdk>=0.20.0
+pytest>=7.4.0
+```
+
+### `requirements-airflow.txt`
+
+```
+apache-airflow-providers-databricks==4.7.0
+databricks-sdk>=0.20.0
+requests>=2.31.0
 ```
 
 ---
 
 ## 8. Guia de Desenvolvimento
 
-### Setup Local
+### Setup Local com Databricks Connect
 
 ```bash
-# Clone e instale dependências
-git clone <repo>
+# Clonar repositório
+git clone https://github.com/thediegoaccount/case-santander-data-master.git
 cd case-santander-data-master
+
+# Criar ambiente virtual
+python3 -m venv ~/.venv/databricks
+source ~/.venv/databricks/bin/activate
+
+# Instalar dependências
 pip install -r requirements.txt
 
-# Execute os testes
+# Configurar Databricks Connect
+databricks configure --token
+# Host: https://adb-7405606224366149.9.azuredatabricks.net
+# Token: <seu_token>
+
+# Adicionar cluster ID ao config
+echo "cluster_id = 0401-150803-wefgy1hc" >> ~/.databrickscfg
+
+# Testar conexão
+databricks-connect test
+
+# Rodar testes
 pytest tests/ -v
 ```
 
 ### Estrutura de Branches
 
 ```
-main       → produção (deploy automático para hk e prod com aprovação)
-develop    → desenvolvimento (deploy automático para dev)
-feature/*  → novas funcionalidades (PR para develop)
+main       → produção (protegida — PR + aprovação + CI obrigatórios)
+develop    → integração (deploy automático para dev)
+feature/*  → novas funcionalidades (PR para develop ou main)
+```
+
+### Fluxo de Desenvolvimento
+
+```
+1. git checkout -b feature/minha-feature
+2. Edite os .py no VSCode
+3. Teste localmente: pytest tests/ -v
+4. Teste via Databricks Connect (SparkSession remota)
+5. git push origin feature/minha-feature
+6. Abra PR no GitHub → CI valida automaticamente
+7. Merge → CI/CD faz deploy para o ambiente correspondente
+8. Databricks Workspace sincroniza via Git folder
 ```
 
 ### Adicionando uma Nova Ação Monitorada
 
-1. Adicione o ticker com sufixo `.SA` na lista `ACOES` em `src/config/settings.py`
-2. Adicione o mapeamento nome/setor em `transformar_acoes()` (`src/transformation/silver_acoes.py`)
-3. Execute os testes: `pytest tests/ -v`
+1. Adicione o ticker em `ACOES` em `src/config/settings.py`
+2. Adicione mapeamento nome/setor em `transformar_acoes()` (`src/transformation/silver_acoes.py`)
+3. Execute: `pytest tests/ -v`
+4. Abra PR com a mudança
 
 ### Adicionando um Novo Indicador BCB
 
-1. Consulte o código da série em `bcb.gov.br/dados/serie`
-2. Adicione a entrada no dicionário de indicadores em `extrair_bcb()` (`src/ingestion/bcb.py`)
-3. Atualize o mapeamento de transformação em `transformar_bcb()` se necessário
+1. Consulte código da série em `bcb.gov.br/dados/serie`
+2. Adicione a função `buscar_diario()` ou `buscar_mensal()` em `extrair_bcb()` (`src/ingestion/bcb.py`)
+3. Atualize transformação em `transformar_bcb()` se necessário
 
 ### Adicionando uma Nova Regra de Fraude
 
-1. Crie a coluna de alerta em `detectar_fraude()` (`src/gold/fraude.py`)
-2. Inclua a nova coluna na soma `total_alertas`
+1. Crie coluna de alerta em `detectar_fraude()` (`src/gold/fraude.py`)
+2. Inclua na soma `total_alertas`
 3. Atualize o dicionário de dados neste documento
 
-### Executando um Job Manualmente
+### Executando Jobs Manualmente
 
 ```bash
 # Via Databricks CLI
-databricks jobs run-now --job-id <job_id>
+databricks jobs run-now --job-id 604800593989824
 
-# Via Databricks Workflow UI
+# Via UI
 pipeline-case-santander → Run now → selecionar tasks
-```
 
-### Padrão de Logging
-
-Todos os jobs utilizam `logging` padrão do Python:
-
-```python
-import logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-logger.info(f"[EXTRAÇÃO] {len(df)} registros extraídos de {source}")
-logger.error(f"[ERRO] Falha ao processar {source}: {e}")
+# Via Airflow (Docker local)
+http://localhost:8080 → DAGs → pipeline_corretora_santander → Trigger DAG
 ```
 
 ---
@@ -1027,39 +1036,310 @@ logger.error(f"[ERRO] Falha ao processar {source}: {e}")
 
 ### Tabelas Monitoradas
 
-| Tabela | Tipo | Threshold Mínimo |
+| Tabela | Threshold Mínimo | Qualidade Esperada |
 |---|---|---|
-| `silver.acoes` | Delta | ≥ 4.000 registros, qualidade ≥ 95% |
-| `silver.bcb` | Delta | ≥ 3.000 registros, qualidade ≥ 95% |
-| `silver.world_bank` | Delta | ≥ 50 registros |
-| `silver.clientes` | Delta | ≥ 10.000 registros |
-| `silver.ordens` | Delta | ≥ 5.000 registros |
-| `gold.anomalias` | Delta | ≥ 4.000 registros |
-| `gold.deteccao_fraude` | Delta | ≥ 5.000 registros |
-| `gold.score_risco_clientes` | Delta | ≥ 1.000 registros |
-| `gold.observabilidade` | Delta | Append por execução |
+| `silver.acoes` | ≥ 4.000 registros | ≥ 95% |
+| `silver.bcb` | ≥ 3.000 registros | ≥ 95% |
+| `silver.world_bank` | ≥ 50 registros | ≥ 87% (nulos esperados) |
+| `silver.clientes` | ≥ 10.000 registros | 100% |
+| `silver.ordens` | ≥ 5.000 registros | 100% |
+| `gold.anomalias` | ≥ 4.000 registros | 100% |
+| `gold.posicao_clientes` | ≥ 3.000 registros | 100% |
+| `gold.score_risco_clientes` | ≥ 1.000 registros | 100% |
+| `gold.deteccao_fraude` | ≥ 5.000 registros | 100% |
 
 ### Lakehouse Monitoring
 
-6 tabelas com perfil automático configurado via Databricks Lakehouse Monitoring:
-- Dashboard de qualidade gerado automaticamente
-- Alertas por degradação de schema
-- Drift detection em distribuições de valores
+6 tabelas com perfil automático via Databricks Lakehouse Monitoring:
+
+```
+gold.anomalias
+gold.posicao_clientes
+gold.score_risco_clientes
+gold.deteccao_fraude
+silver.clientes
+silver.ordens
+```
+
+- Dashboard de qualidade gerado automaticamente por tabela
+- Anomaly detection habilitado no schema gold
+- Data profiling para métricas por coluna
 
 ### Consultar Histórico de Qualidade
 
 ```sql
-SELECT 
+SELECT
+  camada,
   tabela,
-  score_qualidade,
+  qualidade_pct,
   total_registros,
-  alertas,
-  timestamp_monitoramento
+  total_nulos,
+  total_duplicatas,
+  data_verificacao
 FROM case_santander.gold.observabilidade
-ORDER BY timestamp_monitoramento DESC
-LIMIT 100;
+ORDER BY data_verificacao DESC, qualidade_pct ASC;
 ```
 
 ---
 
-*Documentação gerada em 2026-04-02 — Case Santander Data Master*
+## 10. SDC Type 2
+
+### Conceito
+
+Slowly Changing Dimensions Type 2 mantém histórico completo de mudanças em atributos de clientes ao longo do tempo, permitindo auditorias e análises temporais.
+
+### Tabelas SDC
+
+| Tabela | Dimensão | Atributos Rastreados |
+|---|---|---|
+| `silver.clientes_sdc` | Clientes | perfil_risco, score_credito, faixa_saldo, churn |
+| `gold.score_risco_sdc` | Score de Risco | score_risco, categoria_risco, limite_operacional |
+
+### Campos de Controle
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `data_inicio` | string | Data de início de vigência do registro |
+| `data_fim` | string | Data de fim (`9999-12-31` se registro atual) |
+| `atual` | boolean | `True` se registro vigente |
+
+### Exemplo de Consulta Histórica
+
+```sql
+-- Histórico de mudança de perfil de um cliente
+SELECT hash_cliente, perfil_risco, data_inicio, data_fim, atual
+FROM case_santander.silver.clientes_sdc
+WHERE hash_cliente = 'abc123...'
+ORDER BY data_inicio;
+
+-- Clientes que mudaram de perfil
+SELECT hash_cliente, COUNT(*) as num_mudancas
+FROM case_santander.silver.clientes_sdc
+GROUP BY hash_cliente
+HAVING COUNT(*) > 1
+ORDER BY num_mudancas DESC;
+```
+
+---
+
+## 11. LGPD — Práticas Adotadas
+
+### Pseudonimização
+
+| Campo Original | Técnica | Campo Resultante |
+|---|---|---|
+| `CustomerId` | Hash SHA-256 (16 chars) | `hash_cliente` |
+| `Surname` | Primeira letra + asteriscos | `sobrenome_masked` |
+| CPF (hipotético) | Mascaramento parcial | `cpf_masked` |
+| Email (hipotético) | 2 chars + *** + domínio | `email_masked` |
+
+### Controle de Acesso
+
+- **Azure Key Vault:** Credenciais nunca expostas em código ou logs
+- **Service Principal:** Princípio do menor privilégio (Storage Blob Data Contributor)
+- **Unity Catalog:** Controle de acesso por schema e tabela
+- **RBAC ADLS:** Acesso por container por camada
+
+### Retenção de Dados
+
+```
+Bronze → Lifecycle Policy: deletar após 30 dias
+Silver → Retenção: 90 dias (a configurar)
+Gold   → Dados agregados: indefinido
+```
+
+### Separação Dado Analítico vs Transacional
+
+- Dados analíticos usam `hash_cliente` (nunca CPF real)
+- Dado transacional (sistema de origem) nunca exposto no pipeline
+- De-para hash ↔ ID real disponível apenas em sistemas autorizados com log de auditoria
+
+---
+
+## 12. Docker e Apache Airflow
+
+### Arquitetura
+
+```
+Docker Compose
+├── postgres:13         → Banco de metadados do Airflow
+├── airflow-webserver   → Interface web (localhost:8080)
+├── airflow-scheduler   → Dispara as DAGs no horário
+└── airflow-init        → Inicializa DB e cria usuário admin
+```
+
+### Inicialização
+
+```bash
+# Inicializar (primeira vez)
+docker compose -f docker/docker-compose.yml --env-file docker/.env up airflow-init
+
+# Subir stack completa
+docker compose -f docker/docker-compose.yml --env-file docker/.env up -d
+
+# Acessar
+http://localhost:8080
+Login: admin / admin
+```
+
+### Arquivo `.env` necessário
+
+```
+DATABRICKS_HOST=https://adb-7405606224366149.9.azuredatabricks.net
+DATABRICKS_TOKEN=<seu_token>
+```
+
+### Configuração da Conexão Databricks no Airflow
+
+```
+Admin → Connections → Add Connection:
+  Connection Id:   databricks_default
+  Connection Type: Databricks
+  Host:            https://adb-7405606224366149.9.azuredatabricks.net
+  Password:        <token>
+```
+
+### DAG — `pipeline_corretora_santander`
+
+- **Schedule:** `0 6 * * *` (06:00 diário, horário Brasília)
+- **Retry:** 2 tentativas com delay de 5 minutos
+- **Operator:** `DatabricksSubmitRunOperator` — chama jobs via API REST
+- **Cluster:** `0401-150803-wefgy1hc` (cluster já existente)
+
+**Dependências idênticas ao Databricks Workflow:**
+
+```
+t0 >> t1 >> [t5, t6]
+t5 >> t2
+t6 >> [t2, t7]
+t7 >> t9
+[t2, t9] >> t3
+t3 >> [t8, t_sql]
+[t8, t_sql] >> t4
+```
+
+---
+
+## 13. CI/CD — Multi-Ambiente
+
+### Ambientes GitHub
+
+| Ambiente | Branch Trigger | Proteção | Deploy Path |
+|---|---|---|---|
+| `dev` | `develop` | Nenhuma (automático) | `/case-santander/dev` |
+| `hk` | `main` | Required reviewer | `/case-santander/hk` |
+| `prod` | `main` | Required reviewer + 5min timer | `/case-santander/prod` |
+
+### Pipeline CI/CD
+
+```yaml
+ci:               → Roda testes + valida módulos
+deploy-dev:       → Deploy em dev (apenas branch develop)
+deploy-hk:        → Deploy em hk (main, após CI)
+deploy-prod:      → Deploy em prod (main, após hk + timer 5min)
+```
+
+### Proteções da Branch Main
+
+- Pull Request obrigatório
+- 1 aprovação necessária
+- CI (`Integracao Continua`) deve passar
+- Force push bloqueado
+- Ruleset: `protect-main`
+
+### Deploy via CI
+
+O CI/CD faz deploy dos módulos `src/` e `jobs/` para cada ambiente no Databricks Workspace:
+
+```bash
+databricks workspace mkdirs $DEPLOY_PATH/src/config
+databricks workspace import "$f" "$DEPLOY_PATH/$f" --language PYTHON --overwrite
+```
+
+---
+
+## 14. Databricks Genie AI
+
+### Configuração
+
+- **Space:** `Corretora Santander — Análise de Dados`
+- **Warehouse:** Serverless Starter Warehouse
+- **Tabelas conectadas:** Todas as Gold + silver.clientes + silver.ordens
+
+### Instructions configuradas
+
+```
+Você é um assistente de análise de dados da Corretora Santander.
+Responda sempre em português brasileiro.
+
+Ao responder:
+- Use linguagem executiva e objetiva
+- Sempre apresente números e percentuais
+- Destaque insights de negócio
+- Alerte sobre riscos quando relevante
+- Sugira ações quando apropriado
+```
+
+### Common Questions configuradas
+
+```
+"Quais clientes têm maior risco de fraude e qual o valor médio das ordens suspeitas?"
+"Qual o score médio de risco por perfil?"
+"Quais anomalias foram detectadas?"
+"Compare performance das ações por setor"
+"Qual a taxa de churn por perfil de cliente?"
+"Mostre os clientes com score de fraude crítico"
+"Qual ação teve maior queda anormal?"
+"Quantos clientes são conservadores?"
+```
+
+---
+
+## 15. Lakehouse Monitoring
+
+### Tabelas com Monitor Ativo
+
+```python
+w.lakehouse_monitors.create(
+    full_name="case_santander.gold.anomalias",
+    assets_dir="/Shared/monitoring/case_santander/gold/anomalias",
+    output_schema_name="case_santander.gold",
+    snapshot={}
+)
+```
+
+### Tabelas monitoradas
+
+| Tabela | Status |
+|---|---|
+| `gold.anomalias` | ACTIVE |
+| `gold.posicao_clientes` | ACTIVE |
+| `gold.score_risco_clientes` | ACTIVE |
+| `gold.deteccao_fraude` | ACTIVE |
+| `silver.clientes` | ACTIVE |
+| `silver.ordens` | ACTIVE |
+
+### Funcionalidades
+
+- **Snapshot Monitor:** Tira "foto" dos dados a cada execução
+- **Data profiling:** Métricas por coluna (min, max, média, nulos, únicos)
+- **Anomaly detection:** Detecta drift de dados e variações anômalas
+- **Dashboard automático:** Gerado por tabela com gráficos de qualidade
+- **View refresh history:** Histórico de execuções dos monitores
+
+### Consultar Tabelas de Métricas Geradas
+
+```sql
+-- Métricas de perfil geradas automaticamente pelo monitor
+SELECT * FROM case_santander.gold.anomalias_profile_metrics
+ORDER BY window_start DESC
+LIMIT 10;
+
+-- Métricas de drift
+SELECT * FROM case_santander.gold.anomalias_drift_metrics
+ORDER BY window_start DESC;
+```
+
+---
+
+*Documentação atualizada em 2026-04-05 — Case Santander Data Master*
