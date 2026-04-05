@@ -33,6 +33,11 @@ def main():
     silver_streaming_path = f"abfss://silver@{storage_account}.dfs.core.windows.net/streaming/"
     checkpoint_path    = f"abfss://silver@{storage_account}.dfs.core.windows.net/checkpoints/streaming/"
 
+    # Parar todos os streams ativos antes de iniciar
+    for stream in spark.streams.active:
+        stream.stop()
+        print(f"Stream anterior parado: {stream.name}")
+        
     schema_transacao = StructType([
         StructField("timestamp",    StringType(),  True),
         StructField("ticker",       StringType(),  True),
