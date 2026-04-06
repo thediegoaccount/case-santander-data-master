@@ -256,8 +256,6 @@ def calcular_ranking_realtime(spark: SparkSession) -> int:
         WHERE ano = (SELECT MAX(ano) FROM case_santander.gold.performance_acoes)
     """)
 
-    window_rank = Window.orderBy(F.desc("valor_total"))
-
     df_ranking = df_rank \
         .join(F.broadcast(df_perf), on="ticker", how="left") \
         .withColumn("variacao_vs_historico_pct",
@@ -270,9 +268,9 @@ def calcular_ranking_realtime(spark: SparkSession) -> int:
             F.when(F.col("variacao_vs_historico_pct") > 1,  "Alta")
             .when(F.col("variacao_vs_historico_pct") < -1, "Queda")
             .otherwise("Estavel")) \
-        .withColumn("rank_volume", F.rank().over(window_rank)) \
         .withColumn("data_processamento", F.lit(data_hoje)) \
-        .orderBy("rank_volume")
+        .orderBy(F.desc("valor_total")) \
+        .withColumn("rank_volume", F.monotonically_increasing_id() + 1)
 
     df_ranking.write \
         .format("delta") \
