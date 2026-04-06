@@ -79,10 +79,15 @@ def executar_monitoramento(spark: SparkSession, storage_account: str = None) -> 
         "case_santander.silver.world_bank",
         "case_santander.silver.clientes",
         "case_santander.silver.ordens",
+        "case_santander.silver.streaming",
         "case_santander.gold.anomalias",
         "case_santander.gold.posicao_clientes",
         "case_santander.gold.score_risco_clientes",
         "case_santander.gold.deteccao_fraude",
+        "case_santander.gold.fraude_streaming",
+        "case_santander.gold.anomalias_intraday",
+        "case_santander.gold.volume_intraday",
+        "case_santander.gold.ranking_acoes_realtime",
     ]
 
     print(f"Monitorando {len(tabelas)} tabelas...")

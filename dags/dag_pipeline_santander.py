@@ -87,6 +87,12 @@ with DAG(
         json=make_task("t3_gold", "jobs/job_gold.py")
     )
 
+    t10 = DatabricksSubmitRunOperator(
+        task_id="t10_streaming_gold",
+        databricks_conn_id="databricks_default",
+        json=make_task("t10_streaming_gold", "jobs/job_streaming_to_gold.py")
+    )
+
     t8 = DatabricksSubmitRunOperator(
         task_id="t8_lakehouse_monitoring",
         databricks_conn_id="databricks_default",
@@ -111,5 +117,6 @@ with DAG(
     t6 >> [t2, t7]
     t7 >> t9
     [t2, t9] >> t3
-    t3 >> [t8, t_sql]
+    t3 >> t10
+    t10 >> [t8, t_sql]
     [t8, t_sql] >> t4

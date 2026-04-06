@@ -69,20 +69,22 @@ Unity Catalog  Azure SQL DB  Dashboard + Genie AI
 t0_unity_catalog_bronze
 ↓
 t1_extracao
-↓       ↓        ↓
-t5_streaming  t6_clientes_ordens
-↓               ↓
-t2_silver    t7_corretora_analises
-↓
-t9_sdc
-↓        ↓
-t3_gold
-↓
-t8_lakehouse_monitoring
-↓
-t4_observabilidade
-↓
-t_carga_sql
+↓                    ↓
+t5_streaming    t6_clientes_ordens
+↓                    ↓
+t2_silver       t7_corretora_analises
+↓                    ↓
+└────────────→  t9_sdc
+                     ↓
+                t3_gold
+                     ↓
+           t10_streaming_gold
+           (fraude_streaming, anomalias_intraday,
+            volume_intraday, ranking_acoes_realtime)
+                     ↓               ↓
+     t8_lakehouse_monitoring    t_carga_sql
+                     ↓               ↓
+                t4_observabilidade
 
 ---
 
@@ -112,8 +114,12 @@ case_santander/
 ├── ranking_acoes_perfil
 ├── posicao_clientes
 ├── score_risco_clientes
-├── score_risco_sdc → histórico SDC Type 2
+├── score_risco_sdc       → histórico SDC Type 2
 ├── deteccao_fraude
+├── fraude_streaming      → fraude em transações streaming (t10)
+├── anomalias_intraday    → desvios de preço intradiários (t10)
+├── volume_intraday       → volume por ticker/hora (t10)
+├── ranking_acoes_realtime→ ranking em tempo real (t10)
 └── observabilidade
 
 ---
@@ -133,16 +139,30 @@ case_santander/
 
 ## Detecção de Anomalias e Fraudes
 
-### Anomalias de mercado (Z-Score)
+### Anomalias de mercado — batch (Z-Score diário)
 Z > 2  → Alta Anormal
 Z < -2 → Queda Anormal
+Tabela: gold.anomalias
 
-### Detecção de fraude por cliente
+### Anomalias intraday — streaming (Z-Score por hora)
+Z-Score = (preco_medio_hora - preco_medio_historico) / desvio_historico_R$
+Tabela: gold.anomalias_intraday
+
+### Detecção de fraude batch — por cliente
 Regra 1: Valor acima do limite operacional
 Regra 2: Volume suspeito (quantidade > 9.000)
 Regra 3: Preço atípico (> R$90 ou < R$12)
 Regra 4: Perfil incompatível com a operação
 Score: Normal → Médio → Alto → Crítico
+Tabela: gold.deteccao_fraude
+
+### Detecção de fraude streaming — por transação
+Regra 1: Quantidade > 9.000 unidades
+Regra 2: Preço > R$90 ou < R$12
+Regra 3: Valor total > R$500.000 por transação
+Regra 4: Desvio > 2× volatilidade histórica do ativo
+Score: Normal → Médio → Alto → Crítico
+Tabela: gold.fraude_streaming
 
 ---
 
@@ -168,29 +188,55 @@ abc123       | Moderado     | 2024-06-01  | 9999-12-31 | true
 
 ---
 
-## CI/CD — Multi-Ambiente
-
-| Ambiente | Branch | Proteção | Path |
-|---|---|---|---|
-| dev | develop | Automático | /case-santander/dev |
-| hk | main | Revisão obrigatória | /case-santander/hk |
-| prod | main | Revisão + 5min | /case-santander/prod |
-
----
-
 ## Docker + Airflow
 
-Orquestração local via Apache Airflow em Docker:
+O projeto possui **dois orquestradores com papéis distintos** — sem duplicação de execução:
+
+| Orquestrador | Ambiente | Trigger | Propósito |
+|---|---|---|---|
+| Databricks Workflow | Produção | Agendado 06:00 | Pipeline diário automatizado |
+| Apache Airflow + Docker | Desenvolvimento | Manual | Testes, demonstração, multi-cloud |
+
+> Em produção, apenas o **Databricks Workflow** é executado automaticamente.
+> O **Airflow** demonstra como o pipeline seria orquestrado em um ambiente
+> externo ao Databricks — empresa com infraestrutura Airflow ou multi-cloud.
+> Os **jobs Python são os mesmos** — zero duplicação de código.
+
+### Inicializar o Airflow localmente
 ```bash
-# Inicializar
+# Inicializar (primeira vez)
 docker compose -f docker/docker-compose.yml --env-file docker/.env up airflow-init
 
-# Subir
+# Subir stack completa
 docker compose -f docker/docker-compose.yml --env-file docker/.env up -d
+
+### Uso recorrente
+```bash
+# Subir (já inicializado anteriormente)
+docker compose -f docker/docker-compose.yml --env-file docker/.env up -d
+
+# Verificar status dos containers
+docker compose -f docker/docker-compose.yml --env-file docker/.env ps
+
+# Ver logs em tempo real
+docker compose -f docker/docker-compose.yml --env-file docker/.env logs -f
+
+# Derrubar a stack
+docker compose -f docker/docker-compose.yml --env-file docker/.env down
+```
 
 # Acessar
 http://localhost:8080
 Login: admin / admin
+```
+
+### Configurar conexão Databricks no Airflow
+```
+Admin → Connections → Add Connection:
+  Connection Id:   databricks_default
+  Connection Type: Databricks
+  Host:            https://adb-7405606224366149.9.azuredatabricks.net
+  Password:        <token>
 ```
 
 ---
@@ -220,7 +266,8 @@ case-santander-data-master/
 │   ├── gold/
 │   │   ├── anomalias.py
 │   │   ├── performance.py
-│   │   └── fraude.py
+│   │   ├── fraude.py
+│   │   └── streaming_gold.py
 │   ├── clients/
 │   │   └── sdc.py
 │   └── observability/
@@ -232,6 +279,7 @@ case-santander-data-master/
 │   ├── job_gold.py
 │   ├── job_observabilidade.py
 │   ├── job_streaming.py
+│   ├── job_streaming_to_gold.py
 │   ├── job_clientes_ordens.py
 │   ├── job_corretora_analises.py
 │   ├── job_lakehouse_monitoring.py
@@ -290,6 +338,18 @@ pipeline-case-santander → Run now
 docker compose -f docker/docker-compose.yml --env-file docker/.env up -d
 # Acessar localhost:8080 e ativar a DAG
 ```
+
+---
+
+## Boas Práticas de Engenharia de Dados
+
+| Prática | Onde | Benefício |
+|---|---|---|
+| **Auto Loader** (`cloudFiles`) | `job_streaming.py` | Rastreamento incremental de arquivos no ADLS com schema evolution automática; escala para bilhões de arquivos sem listar diretório |
+| **Liquid Clustering** | `job_unity_catalog.py` | Substitui `partitionBy` estático por clustering dinâmico — Databricks reorganiza layout dos arquivos incrementalmente via OPTIMIZE, sem reescrita da tabela |
+| **OPTIMIZE + ZORDER + VACUUM** | `job_observabilidade.py` | Compacta small files e reordena dados pelas colunas de filtro mais usadas (data skipping no Photon); VACUUM remove versões além de 7 dias de time travel |
+| **Delta Change Data Feed (CDC)** | `job_unity_catalog.py` → `job_streaming_to_gold.py` | Rastreamento de mudanças a nível de linha (insert/update/delete) em `silver.streaming`, `silver.ordens` e `silver.clientes`; leitura incremental por versão evita full scan diário |
+| **Broadcast Join** | `streaming_gold.py`, `fraude.py`, `job_corretora_analises.py` | `F.broadcast()` em tabelas pequenas (9 linhas `df_perf`, <1 MB `df_score` e `df_clientes`) elimina sort-merge shuffle distribuindo a tabela inteira em cada executor |
 
 ---
 

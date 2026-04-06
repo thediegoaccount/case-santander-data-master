@@ -17,6 +17,7 @@
 13. [CI/CD — Multi-Ambiente](#13-cicd--multi-ambiente)
 14. [Databricks Genie AI](#14-databricks-genie-ai)
 15. [Lakehouse Monitoring](#15-lakehouse-monitoring)
+16. [Delta Optimization Best Practices](#16-delta-optimization-best-practices)
 
 ---
 
@@ -75,9 +76,10 @@ src/
 │   ├── silver_bcb.py            # Bronze → Silver: indicadores BCB
 │   └── silver_world_bank.py     # Bronze → Silver: World Bank
 ├── gold/
-│   ├── anomalias.py             # Detecção de anomalias por Z-Score
-│   ├── fraude.py                # Motor de detecção de fraudes
-│   └── performance.py           # Métricas de performance por ação/setor
+│   ├── anomalias.py             # Detecção de anomalias por Z-Score (batch diário)
+│   ├── fraude.py                # Motor de detecção de fraudes batch (broadcast join)
+│   ├── performance.py           # Métricas de performance por ação/setor
+│   └── streaming_gold.py        # 4 tabelas Gold derivadas de silver.streaming
 ├── clients/
 │   └── sdc.py                   # Slowly Changing Dimensions Type 2
 ├── observability/
@@ -86,14 +88,15 @@ src/
     └── __init__.py              # Placeholder streaming
 
 jobs/
-├── job_unity_catalog.py         # t0 — Registra tabelas Bronze no Unity Catalog
+├── job_unity_catalog.py         # t0 — Registra tabelas; Liquid Clustering; Delta CDF
 ├── job_extracao.py              # t1 — Orquestra todas as ingestões
 ├── job_silver.py                # t2 — Orquestra todas as transformações Silver
 ├── job_corretora_analises.py    # t7 — Posição, score de risco, fraude, SQL
 ├── job_sdc.py                   # t9 — SDC Type 2 clientes e score risco
 ├── job_gold.py                  # t3 — Orquestra geração das tabelas Gold
-├── job_observabilidade.py       # t4 — Orquestra monitoramento de qualidade
-├── job_streaming.py             # t5 — Structured Streaming via arquivos Delta
+├── job_observabilidade.py       # t4 — Monitoramento + OPTIMIZE ZORDER + VACUUM
+├── job_streaming.py             # t5 — Auto Loader (cloudFiles) → silver.streaming
+├── job_streaming_to_gold.py     # t10 — silver.streaming → 4 tabelas Gold (CDC + broadcast)
 ├── job_clientes_ordens.py       # t6 — Ingestão Kaggle + ordens simuladas
 ├── job_lakehouse_monitoring.py  # t8 — Lakehouse Monitoring via SDK
 └── job_carga_sql.py             # t_sql — Carga das tabelas Gold no Azure SQL
@@ -423,9 +426,58 @@ Executa checagem em 9 tabelas críticas do pipeline via Unity Catalog.
 **Tabelas monitoradas:**
 
 ```
-silver: acoes, bcb, world_bank, clientes, ordens
-gold:   anomalias, posicao_clientes, score_risco_clientes, deteccao_fraude
+silver: acoes, bcb, world_bank, clientes, ordens, streaming
+gold:   anomalias, posicao_clientes, score_risco_clientes, deteccao_fraude,
+        fraude_streaming, anomalias_intraday, volume_intraday, ranking_acoes_realtime
 ```
+
+---
+
+### `src/gold/streaming_gold.py`
+
+Módulo com 4 funções Gold derivadas de `silver.streaming`. Todas utilizam `F.broadcast()` no join com `gold.performance_acoes` (9 linhas).
+
+#### `detectar_fraude_streaming(spark)`
+
+Detecta transações suspeitas via 4 regras aplicadas sobre `silver.streaming` cruzado com benchmarks históricos de preço.
+
+| Regra | Critério | Coluna |
+|---|---|---|
+| 1 | `quantidade > 9.000` | `alerta_volume_suspeito` |
+| 2 | `preco > 90 OR preco < 12` | `alerta_preco_atipico` |
+| 3 | `valor_total > R$ 500.000` | `alerta_valor_elevado` |
+| 4 | `\|preco - preco_medio\| > 2 × volatilidade × preco_medio / 100` | `alerta_desvio_historico` |
+
+**Saída:** `gold.fraude_streaming` — **Retorno:** total de transações Críticas.
+
+#### `detectar_anomalias_intraday(spark)`
+
+Z-Score por (ticker, hora) comparando `preco_medio_hora` contra `preco_medio` histórico de `gold.performance_acoes`.
+
+```
+desvio_historico_R$ = preco_medio × volatilidade / 100
+zscore_intraday     = (preco_medio_hora - preco_medio) / desvio_historico_R$
+```
+
+**Saída:** `gold.anomalias_intraday` — **Retorno:** total de anomalias (|z| > 2).
+
+#### `calcular_volume_intraday(spark)`
+
+Agrega volume de streaming por (ticker, hora) e compara com `volume_medio` histórico.
+
+```
+pct_volume_diario = volume_hora / volume_medio × 100
+alerta: > 30% → Crítico | > 15% → Alto | else → Normal
+pressao_compradora: volume_compras vs volume_vendas
+```
+
+**Saída:** `gold.volume_intraday`.
+
+#### `calcular_ranking_realtime(spark)`
+
+Ranking de ativos por valor financeiro total negociado no streaming, com variação % vs preço histórico e `RANK()` via Window function.
+
+**Saída:** `gold.ranking_acoes_realtime`.
 
 ---
 
@@ -440,13 +492,17 @@ Notebook 11 refatorado. Executa:
 5. **Ranking ações** → `gold.ranking_acoes_perfil`
 6. **Carga SQL** → tabelas dbo.* no Azure SQL Database
 
+> `F.broadcast(df_clientes)` aplicado no join com `df_posicao` — df_clientes projetado em 4 colunas (~10.000 linhas, < 1 MB).
+
 ### `jobs/job_unity_catalog.py`
 
-Notebook 07 refatorado. Registra todas as tabelas Bronze e Gold no Unity Catalog:
+Notebook 07 refatorado. Registra todas as tabelas Bronze e Gold no Unity Catalog, e aplica otimizações Delta:
 
 - Tabelas Bronze Parquet: acoes, bcb, world_bank, kafka
 - Tabelas Bronze Delta: clientes, ordens
 - Tabelas Gold Delta: performance_acoes, anomalias, acoes_vs_cambio
+- **Liquid Clustering** em 7 tabelas Silver e Gold (ver seção 16)
+- **Delta Change Data Feed** habilitado em silver.streaming, silver.ordens, silver.clientes
 
 ### `jobs/job_lakehouse_monitoring.py`
 
@@ -702,6 +758,85 @@ w.lakehouse_monitors.create(
 | total_churn | long | Total com churn |
 | taxa_churn_pct | double | Taxa de churn % |
 
+### Gold: `fraude_streaming`
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| id_transacao | string | ID único da transação |
+| timestamp | timestamp | Momento da transação |
+| ticker | string | Ação negociada |
+| tipo | string | compra / venda |
+| preco | double | Preço da transação |
+| quantidade | long | Quantidade |
+| valor_total | double | preco × quantidade |
+| preco_medio | double | Preço médio histórico (referência) |
+| volatilidade | double | Volatilidade histórica (%) |
+| alerta_volume_suspeito | boolean | quantidade > 9.000 |
+| alerta_preco_atipico | boolean | preco > 90 ou < 12 |
+| alerta_valor_elevado | boolean | valor_total > R$ 500.000 |
+| alerta_desvio_historico | boolean | Desvio > 2× volatilidade histórica |
+| total_alertas | int | Soma dos alertas |
+| score_fraude | string | Normal / Medio / Alto / Critico |
+| requer_revisao | boolean | total_alertas >= 2 |
+| data_processamento | string | Data do processamento |
+
+### Gold: `anomalias_intraday`
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| ticker | string | Ação negociada |
+| hora | int | Hora do dia (0-23) |
+| preco_medio_hora | double | Preço médio no período |
+| valor_total_hora | double | Valor financeiro total |
+| volume_hora | long | Quantidade total |
+| total_transacoes_hora | long | Contagem de transações |
+| preco_medio | double | Preço médio histórico |
+| volatilidade | double | Volatilidade histórica (%) |
+| desvio_historico_rs | double | volatilidade × preco_medio / 100 |
+| zscore_intraday | double | Z-Score da hora vs histórico |
+| anomalia | boolean | True se \|zscore\| > 2 |
+| tipo_anomalia | string | Normal / Alta Anormal / Queda Anormal |
+| data_processamento | string | Data do processamento |
+
+### Gold: `volume_intraday`
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| ticker | string | Ação negociada |
+| hora | int | Hora do dia (0-23) |
+| total_transacoes | long | Número de transações |
+| volume_hora | long | Quantidade total |
+| valor_total_hora | double | Valor financeiro total |
+| preco_medio_hora | double | Preço médio |
+| volume_compras | long | Quantidade de compras |
+| volume_vendas | long | Quantidade de vendas |
+| volume_medio | double | Volume médio histórico diário |
+| pct_volume_diario | double | volume_hora / volume_medio × 100 |
+| alerta_volume_intraday | string | Normal / Alto / Critico |
+| pressao_compradora | string | Compra / Venda / Neutro |
+| data_processamento | string | Data do processamento |
+
+### Gold: `ranking_acoes_realtime`
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| ticker | string | Ação negociada |
+| total_transacoes | long | Número de transações |
+| volume_total | long | Quantidade total |
+| valor_total | double | Valor financeiro total |
+| preco_medio_atual | double | Preço médio no streaming |
+| total_compras | long | Transações de compra |
+| total_vendas | long | Transações de venda |
+| preco_minimo | double | Menor preço observado |
+| preco_maximo | double | Maior preço observado |
+| empresa | string | Nome da empresa |
+| setor | string | Setor B3 |
+| preco_medio_historico | double | Preço médio histórico |
+| variacao_vs_historico_pct | double | Desvio % do preço atual vs histórico |
+| tendencia | string | Alta / Queda / Estavel |
+| rank_volume | int | Posição no ranking por valor total |
+| data_processamento | string | Data do processamento |
+
 ### Gold: `observabilidade`
 
 | Coluna | Tipo | Descrição |
@@ -863,10 +998,11 @@ response = requests.get(url, auth=(kaggle_username, kaggle_key), stream=True)
 **Event Hub:** `transacoes-financeiras`  
 **Autenticação:** Connection String via Key Vault
 
-**Structured Streaming via arquivos:**
+**Structured Streaming via Auto Loader:**
 - Producer grava Parquet em `bronze/kafka/`
-- Consumer usa `readStream.format("parquet")` com `.trigger(availableNow=True)`
-- Saída em `silver/streaming/` como Delta Lake
+- Consumer usa `readStream.format("cloudFiles")` com `cloudFiles.format=parquet`
+- Auto Loader rastreia arquivos processados via checkpoint; suporta schema evolution
+- Saída em `silver/streaming/` como Delta Lake com Change Data Feed habilitado
 
 ### 6.6 Azure Key Vault
 
@@ -1370,6 +1506,135 @@ LIMIT 10;
 -- Métricas de drift
 SELECT * FROM case_santander.gold.anomalias_drift_metrics
 ORDER BY window_start DESC;
+```
+
+---
+
+## 16. Delta Optimization Best Practices
+
+### 16.1 Auto Loader (`job_streaming.py`)
+
+Substitui `readStream.format("parquet")` por `format("cloudFiles")` para ingestão incremental cloud-native.
+
+```python
+spark.readStream \
+    .format("cloudFiles") \
+    .option("cloudFiles.format", "parquet") \
+    .option("cloudFiles.schemaLocation", checkpoint_path + "/schema") \
+    .option("cloudFiles.maxFilesPerTrigger", 1) \
+    .schema(schema_transacao) \
+    .load(bronze_kafka_path)
+```
+
+| Vantagem | Descrição |
+|---|---|
+| **Rastreamento incremental** | Checkpoint via `_spark_metadata` — não relê arquivos já processados |
+| **Schema evolution** | Detecta e propaga automaticamente novas colunas |
+| **Escalabilidade** | Suporta bilhões de arquivos sem listar o diretório completo |
+| **Fault-tolerant** | Reinício seguro a partir do último checkpoint |
+
+---
+
+### 16.2 Liquid Clustering (`job_unity_catalog.py`)
+
+Aplicado via `ALTER TABLE ... CLUSTER BY` em 7 tabelas Silver e Gold após criação.
+
+```sql
+ALTER TABLE case_santander.silver.acoes           CLUSTER BY (ticker, ano, mes)
+ALTER TABLE case_santander.silver.ordens          CLUSTER BY (hash_cliente, ticker)
+ALTER TABLE case_santander.silver.clientes        CLUSTER BY (hash_cliente, perfil_risco)
+ALTER TABLE case_santander.gold.anomalias         CLUSTER BY (ticker, data_processamento)
+ALTER TABLE case_santander.gold.performance_acoes CLUSTER BY (ticker, ano)
+ALTER TABLE case_santander.gold.deteccao_fraude   CLUSTER BY (score_fraude, data_processamento)
+ALTER TABLE case_santander.gold.score_risco_clientes CLUSTER BY (categoria_risco, hash_cliente)
+```
+
+| Comparativo | `partitionBy` estático | Liquid Clustering |
+|---|---|---|
+| Reorganização | Reescrita completa | Incremental via OPTIMIZE |
+| Alta cardinalidade | Cria muitas partições pequenas | Gerenciado automaticamente |
+| Multi-coluna | Limitado | Até 4 colunas de clustering |
+| Mudança de estratégia | Reescrita + DDL | `ALTER TABLE` sem downtime |
+
+---
+
+### 16.3 OPTIMIZE + ZORDER + VACUUM (`job_observabilidade.py`)
+
+Executado ao final do pipeline em 10 tabelas críticas.
+
+```python
+spark.sql(f"OPTIMIZE {tabela} ZORDER BY ({cols_zorder})")
+spark.sql(f"VACUUM {tabela} RETAIN 168 HOURS")  # 7 dias de time travel
+```
+
+| Operação | Efeito | Frequência |
+|---|---|---|
+| `OPTIMIZE` | Compacta small files em arquivos maiores (target ~1 GB) | Diária |
+| `ZORDER BY` | Reordena dados fisicamente pelas colunas de filtro — habilita data skipping no Photon | Diária |
+| `VACUUM` | Remove arquivos Delta obsoletos além da janela de retenção | Diária |
+
+**Colunas ZORDER por tabela:**
+
+| Tabela | ZORDER BY | Justificativa |
+|---|---|---|
+| `silver.acoes` | ticker, ano, mes | Filtros mais comuns em queries de mercado |
+| `silver.ordens` | hash_cliente, ticker | Joins em fraude e posição de carteira |
+| `silver.clientes` | hash_cliente | Chave de join em todos os Gold jobs |
+| `silver.streaming` | ticker, hora | Filtros de anomalia intraday |
+| `gold.anomalias` | ticker | Queries por ativo |
+| `gold.performance_acoes` | ticker, ano | Referência histórica nos joins broadcast |
+| `gold.deteccao_fraude` | score_fraude | Filtro por criticidade |
+| `gold.fraude_streaming` | score_fraude | Filtro por criticidade |
+| `gold.posicao_clientes` | ticker | Análise de carteira |
+| `gold.score_risco_clientes` | categoria_risco | Segmentação de risco |
+
+---
+
+### 16.4 Delta Change Data Feed — CDC (`job_unity_catalog.py` + `job_streaming_to_gold.py`)
+
+**Habilitação** (executada uma vez em `job_unity_catalog.py`):
+
+```sql
+ALTER TABLE case_santander.silver.streaming SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
+ALTER TABLE case_santander.silver.ordens    SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
+ALTER TABLE case_santander.silver.clientes  SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
+```
+
+**Leitura incremental** em `job_streaming_to_gold.py`:
+
+```python
+spark.read \
+    .format("delta") \
+    .option("readChangeFeed", "true") \
+    .option("startingVersion", ultima_versao) \
+    .table("case_santander.silver.streaming") \
+    .filter("_change_type = 'insert'")
+```
+
+| Campo CDF | Tipo | Descrição |
+|---|---|---|
+| `_change_type` | string | insert / update_preimage / update_postimage / delete |
+| `_commit_version` | long | Versão Delta do commit |
+| `_commit_timestamp` | timestamp | Timestamp do commit |
+
+**Estratégia de versão:** `ultima_versao` recuperada de `gold.observabilidade` com fallback para versão 0. Garante idempotência em reprocessamentos.
+
+---
+
+### 16.5 Broadcast Join (`streaming_gold.py`, `fraude.py`, `job_corretora_analises.py`)
+
+`F.broadcast()` aplicado explicitamente em todos os joins com tabelas pequenas, independente do threshold configurado no cluster.
+
+| Join | Lado broadcast | Tamanho estimado | Shuffle evitado |
+|---|---|---|---|
+| `silver.streaming` × `performance_acoes` | `df_perf` — 9 linhas | < 1 KB | Sort-merge de 200+ transações |
+| `silver.ordens` × `score_risco_clientes` | `df_score` — 7.900 × 4 cols | ~600 KB | Sort-merge de 5.341 ordens |
+| `df_posicao` × `silver.clientes` | `df_clientes` — 10.000 × 4 cols | ~800 KB | Sort-merge de milhares de posições |
+
+```python
+# Padrão aplicado — hint explícito garante broadcast mesmo com
+# spark.sql.autoBroadcastJoinThreshold desabilitado por política do cluster
+df.join(F.broadcast(df_pequeno), on="chave", how="left")
 ```
 
 ---

@@ -23,8 +23,10 @@ def detectar_fraude(spark: SparkSession) -> int:
         FROM case_santander.gold.score_risco_clientes
     """)
 
+    # df_score tem ~7.900 linhas com apenas 4 colunas — cabe em broadcast
+    # evitando shuffle de df_ordens (5.341 linhas) em sort-merge join
     df_fraude = df_ordens \
-        .join(df_score, on="hash_cliente", how="left") \
+        .join(F.broadcast(df_score), on="hash_cliente", how="left") \
         .withColumn("alerta_valor_alto",
             F.when(F.col("valor_total") > F.col("limite_operacional"), True)
             .otherwise(False)) \
