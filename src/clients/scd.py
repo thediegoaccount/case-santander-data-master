@@ -1,20 +1,20 @@
 """
-Slowly Changing Dimensions (SDC) Type 2
+Slowly Changing Dimensions (SCD) Type 2
 """
 from pyspark.sql import functions as F
 from pyspark.sql import SparkSession
 from datetime import datetime
 
 
-def aplicar_sdc_type2(spark: SparkSession, df_novos,
+def aplicar_scd_type2(spark: SparkSession, df_novos,
                       tabela_uc: str, chave: str) -> None:
     """
-    Aplica SDC Type 2 em uma tabela Delta Lake via Unity Catalog.
+    Aplica SCD Type 2 em uma tabela Delta Lake via Unity Catalog.
     """
     from delta.tables import DeltaTable
     data_hoje = datetime.now().strftime("%Y-%m-%d")
 
-    df_com_sdc = df_novos \
+    df_com_scd = df_novos \
         .withColumn("data_inicio", F.lit(data_hoje)) \
         .withColumn("data_fim",    F.lit("9999-12-31")) \
         .withColumn("atual",       F.lit(True))
@@ -35,33 +35,33 @@ def aplicar_sdc_type2(spark: SparkSession, df_novos,
             .execute()
 
         # Insere novos registros
-        df_com_sdc.write \
+        df_com_scd.write \
             .format("delta") \
             .mode("append") \
             .option("mergeSchema", "true") \
             .saveAsTable(tabela_uc)
 
-        print(f"SDC Type 2 atualizado: {tabela_uc}")
+        print(f"SCD Type 2 atualizado: {tabela_uc}")
 
     except Exception as e:
         if "is not a Delta table" in str(e) or "Table or view not found" in str(e):
             # Primeira carga
-            df_com_sdc.write \
+            df_com_scd.write \
                 .format("delta") \
                 .mode("overwrite") \
                 .option("mergeSchema", "true") \
                 .saveAsTable(tabela_uc)
-            print(f"SDC Type 2 primeira carga: {tabela_uc}")
+            print(f"SCD Type 2 primeira carga: {tabela_uc}")
         else:
             raise e
 
 
-def aplicar_sdc_clientes(spark: SparkSession,
+def aplicar_scd_clientes(spark: SparkSession,
                          storage_account: str = None) -> int:
     """
-    Aplica SDC Type 2 na tabela de clientes via Unity Catalog.
+    Aplica SCD Type 2 na tabela de clientes via Unity Catalog.
     """
-    print("Aplicando SDC Type 2 em clientes...")
+    print("Aplicando SCD Type 2 em clientes...")
 
     df_clientes = spark.sql("""
         SELECT
@@ -71,26 +71,26 @@ def aplicar_sdc_clientes(spark: SparkSession,
         FROM case_santander.silver.clientes
     """)
 
-    aplicar_sdc_type2(spark, df_clientes,
-                      "case_santander.silver.clientes_sdc",
+    aplicar_scd_type2(spark, df_clientes,
+                      "case_santander.silver.clientes_scd",
                       "hash_cliente")
 
     total = spark.sql("""
-        SELECT COUNT(*) as total 
-        FROM case_santander.silver.clientes_sdc 
+        SELECT COUNT(*) as total
+        FROM case_santander.silver.clientes_scd
         WHERE atual = true
     """).collect()[0]["total"]
 
-    print(f"SDC clientes — {total} registros ativos")
+    print(f"SCD clientes — {total} registros ativos")
     return total
 
 
-def aplicar_sdc_score_risco(spark: SparkSession,
+def aplicar_scd_score_risco(spark: SparkSession,
                              storage_account: str = None) -> int:
     """
-    Aplica SDC Type 2 no score de risco via Unity Catalog.
+    Aplica SCD Type 2 no score de risco via Unity Catalog.
     """
-    print("Aplicando SDC Type 2 em score de risco...")
+    print("Aplicando SCD Type 2 em score de risco...")
 
     df_score = spark.sql("""
         SELECT
@@ -100,15 +100,15 @@ def aplicar_sdc_score_risco(spark: SparkSession,
         FROM case_santander.gold.score_risco_clientes
     """)
 
-    aplicar_sdc_type2(spark, df_score,
-                      "case_santander.gold.score_risco_sdc",
+    aplicar_scd_type2(spark, df_score,
+                      "case_santander.gold.score_risco_scd",
                       "hash_cliente")
 
     total = spark.sql("""
-        SELECT COUNT(*) as total 
-        FROM case_santander.gold.score_risco_sdc 
+        SELECT COUNT(*) as total
+        FROM case_santander.gold.score_risco_scd
         WHERE atual = true
     """).collect()[0]["total"]
 
-    print(f"SDC score risco — {total} registros ativos")
+    print(f"SCD score risco — {total} registros ativos")
     return total

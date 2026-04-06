@@ -11,7 +11,7 @@
 7. [Configuração e Dependências](#7-configuração-e-dependências)
 8. [Guia de Desenvolvimento](#8-guia-de-desenvolvimento)
 9. [Monitoramento e Alertas](#9-monitoramento-e-alertas)
-10. [SDC Type 2](#10-sdc-type-2)
+10. [SCD Type 2](#10-scd-type-2)
 11. [LGPD — Práticas Adotadas](#11-lgpd--práticas-adotadas)
 12. [Docker e Apache Airflow](#12-docker-e-apache-airflow)
 13. [CI/CD — Multi-Ambiente](#13-cicd--multi-ambiente)
@@ -39,7 +39,7 @@ SILVER (Dados Curados)
 
 GOLD (Dados Analíticos)
   └── Delta Lake — tabelas de negócio
-  └── Agregações, scores, alertas, SDC Type 2
+  └── Agregações, scores, alertas, SCD Type 2
   └── Prontas para consumo por dashboards, SQL e Genie AI
 ```
 
@@ -81,7 +81,7 @@ src/
 │   ├── performance.py           # Métricas de performance por ação/setor
 │   └── streaming_gold.py        # 4 tabelas Gold derivadas de silver.streaming
 ├── clients/
-│   └── sdc.py                   # Slowly Changing Dimensions Type 2
+│   └── scd.py                   # Slowly Changing Dimensions Type 2
 ├── observability/
 │   └── monitoring.py            # Qualidade de dados e alertas via Unity Catalog
 └── streaming/
@@ -92,7 +92,7 @@ jobs/
 ├── job_extracao.py              # t1 — Orquestra todas as ingestões
 ├── job_silver.py                # t2 — Orquestra todas as transformações Silver
 ├── job_corretora_analises.py    # t7 — Posição, score de risco, fraude, SQL
-├── job_sdc.py                   # t9 — SDC Type 2 clientes e score risco
+├── job_scd.py                   # t9 — SCD Type 2 clientes e score risco
 ├── job_gold.py                  # t3 — Orquestra geração das tabelas Gold
 ├── job_observabilidade.py       # t4 — Monitoramento + OPTIMIZE ZORDER + VACUUM
 ├── job_streaming.py             # t5 — Auto Loader (cloudFiles) → silver.streaming
@@ -363,9 +363,9 @@ volume_medio, volume_total, dias_negociados
 
 ---
 
-### `src/clients/sdc.py`
+### `src/clients/scd.py`
 
-#### `aplicar_sdc_type2(spark, df_novos, tabela_uc, chave)`
+#### `aplicar_scd_type2(spark, df_novos, tabela_uc, chave)`
 
 Aplica SCD Type 2 genérico em tabela Delta via Unity Catalog.
 
@@ -381,15 +381,15 @@ Se tabela não existe:
   CREATE: primeira carga com campos SCD
 ```
 
-#### `aplicar_sdc_clientes(spark)`
+#### `aplicar_scd_clientes(spark)`
 
-Aplica SCD Type 2 em `case_santander.silver.clientes_sdc`.
+Aplica SCD Type 2 em `case_santander.silver.clientes_scd`.
 
 **Campos rastreados:** `perfil_risco`, `score_credito`, `faixa_saldo`, `churn`
 
-#### `aplicar_sdc_score_risco(spark)`
+#### `aplicar_scd_score_risco(spark)`
 
-Aplica SCD Type 2 em `case_santander.gold.score_risco_sdc`.
+Aplica SCD Type 2 em `case_santander.gold.score_risco_scd`.
 
 **Campos rastreados:** `score_risco`, `categoria_risco`, `limite_operacional`
 
@@ -645,7 +645,7 @@ w.lakehouse_monitors.create(
 | alerta_preco | string | Normal / Preco Alto / Preco Baixo |
 | processado_em | string | Timestamp de processamento |
 
-### Silver: `clientes_sdc` (SDC Type 2)
+### Silver: `clientes_scd` (SCD Type 2)
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
@@ -709,7 +709,7 @@ w.lakehouse_monitors.create(
 | taxa_cancelamento_pct | double | % de ordens canceladas |
 | data_processamento | string | Data do processamento |
 
-### Gold: `score_risco_sdc` (SDC Type 2)
+### Gold: `score_risco_scd` (SCD Type 2)
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
@@ -918,7 +918,7 @@ Alertas:
   total == 0     → ERROR
 ```
 
-### SDC Type 2 — Chaveamento Temporal
+### SCD Type 2 — Chaveamento Temporal
 
 ```
 Para cada execução diária:
@@ -1218,18 +1218,18 @@ ORDER BY data_verificacao DESC, qualidade_pct ASC;
 
 ---
 
-## 10. SDC Type 2
+## 10. SCD Type 2
 
 ### Conceito
 
 Slowly Changing Dimensions Type 2 mantém histórico completo de mudanças em atributos de clientes ao longo do tempo, permitindo auditorias e análises temporais.
 
-### Tabelas SDC
+### Tabelas SCD
 
 | Tabela | Dimensão | Atributos Rastreados |
 |---|---|---|
-| `silver.clientes_sdc` | Clientes | perfil_risco, score_credito, faixa_saldo, churn |
-| `gold.score_risco_sdc` | Score de Risco | score_risco, categoria_risco, limite_operacional |
+| `silver.clientes_scd` | Clientes | perfil_risco, score_credito, faixa_saldo, churn |
+| `gold.score_risco_scd` | Score de Risco | score_risco, categoria_risco, limite_operacional |
 
 ### Campos de Controle
 
@@ -1244,13 +1244,13 @@ Slowly Changing Dimensions Type 2 mantém histórico completo de mudanças em at
 ```sql
 -- Histórico de mudança de perfil de um cliente
 SELECT hash_cliente, perfil_risco, data_inicio, data_fim, atual
-FROM case_santander.silver.clientes_sdc
+FROM case_santander.silver.clientes_scd
 WHERE hash_cliente = 'abc123...'
 ORDER BY data_inicio;
 
 -- Clientes que mudaram de perfil
 SELECT hash_cliente, COUNT(*) as num_mudancas
-FROM case_santander.silver.clientes_sdc
+FROM case_santander.silver.clientes_scd
 GROUP BY hash_cliente
 HAVING COUNT(*) > 1
 ORDER BY num_mudancas DESC;
