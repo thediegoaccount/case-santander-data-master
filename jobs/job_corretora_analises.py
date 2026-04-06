@@ -51,7 +51,7 @@ def main():
             .when(F.col("quantidade_liquida") < 0, "Vendido a Descoberto")
             .otherwise("Zerado")) \
         .withColumn("data_processamento", F.lit(data_hoje)) \
-        .join(df_clientes, on="hash_cliente", how="left")
+        .join(F.broadcast(df_clientes), on="hash_cliente", how="left")
 
     df_posicao.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \

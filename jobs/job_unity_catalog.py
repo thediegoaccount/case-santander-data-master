@@ -92,6 +92,47 @@ def main():
         except Exception as e:
             print(f"  ⚠️ case_santander.gold.{tabela} → {e}")
 
+    # Liquid Clustering: substitui particionamento estático por clustering
+    # dinâmico — o Databricks decide o layout ideal dos arquivos por coluna,
+    # sem necessidade de reescrever a tabela ao mudar a estratégia.
+    print("\nAplicando Liquid Clustering...")
+    tabelas_liquid = {
+        "case_santander.silver.acoes":              "ticker, ano, mes",
+        "case_santander.silver.ordens":             "hash_cliente, ticker",
+        "case_santander.silver.clientes":           "hash_cliente, perfil_risco",
+        "case_santander.gold.anomalias":            "ticker, data_processamento",
+        "case_santander.gold.performance_acoes":    "ticker, ano",
+        "case_santander.gold.deteccao_fraude":      "score_fraude, data_processamento",
+        "case_santander.gold.score_risco_clientes": "categoria_risco, hash_cliente",
+    }
+
+    for tabela, cols in tabelas_liquid.items():
+        try:
+            spark.sql(f"ALTER TABLE {tabela} CLUSTER BY ({cols})")
+            print(f"  ✅ Liquid Clustering: {tabela} → ({cols})")
+        except Exception as e:
+            print(f"  ⚠️ {tabela}: {e}")
+
+    # Delta Change Data Feed (CDC): habilita rastreamento de mudanças
+    # a nível de linha (insert/update/delete) nas tabelas Silver críticas.
+    # Permite leitura incremental por versão ou timestamp nos jobs Gold.
+    print("\nHabilitando Delta Change Data Feed (CDC)...")
+    tabelas_cdf = [
+        "case_santander.silver.streaming",
+        "case_santander.silver.ordens",
+        "case_santander.silver.clientes",
+    ]
+
+    for tabela in tabelas_cdf:
+        try:
+            spark.sql(f"""
+                ALTER TABLE {tabela}
+                SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
+            """)
+            print(f"  ✅ CDF habilitado: {tabela}")
+        except Exception as e:
+            print(f"  ⚠️ {tabela}: {e}")
+
     fim = datetime.now()
     print(f"\n=== JOB UNITY CATALOG CONCLUIDO ===")
     print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")

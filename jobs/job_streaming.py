@@ -51,10 +51,14 @@ def main():
     # Limpar checkpoint anterior
     dbutils.fs.rm(checkpoint_path, recurse=True)
 
+    # Auto Loader: ingestion incremental cloud-native com rastreamento de arquivos
+    # e inferência/evolução de schema automática via cloudFiles
     df_stream = spark.readStream \
-        .format("parquet") \
+        .format("cloudFiles") \
+        .option("cloudFiles.format", "parquet") \
+        .option("cloudFiles.schemaLocation", checkpoint_path + "/schema") \
+        .option("cloudFiles.maxFilesPerTrigger", 1) \
         .schema(schema_transacao) \
-        .option("maxFilesPerTrigger", 1) \
         .load(bronze_kafka_path)
 
     df_processado = df_stream \
