@@ -270,7 +270,7 @@ def calcular_ranking_realtime(spark: SparkSession) -> int:
             .otherwise("Estavel")) \
         .withColumn("data_processamento", F.lit(data_hoje)) \
         .orderBy(F.desc("valor_total")) \
-        .withColumn("rank_volume", F.monotonically_increasing_id() + 1)
+        .withColumn("rank_volume", (F.monotonically_increasing_id() + 1).cast("int"))
 
     df_ranking.write \
         .format("delta") \
