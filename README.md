@@ -195,20 +195,50 @@ O projeto possui **dois orquestradores com papéis distintos** — sem duplicaç
 | Orquestrador | Ambiente | Trigger | Propósito |
 |---|---|---|---|
 | Databricks Workflow | Produção | Agendado 06:00 | Pipeline diário automatizado |
-| Apache Airflow + Docker | Desenvolvimento | Manual | Testes, demonstração, multi-cloud |
+| Airflow + Docker (LocalExecutor) | Desenvolvimento | Manual | Leve, 1 processo, ideal para dev local |
+| Airflow + Docker (CeleryExecutor) | Enterprise | Manual/Agendado | 7 containers, 1 por serviço, escalável |
 
 > Em produção, apenas o **Databricks Workflow** é executado automaticamente.
 > O **Airflow** demonstra como o pipeline seria orquestrado em um ambiente
 > externo ao Databricks — empresa com infraestrutura Airflow ou multi-cloud.
 > Os **jobs Python são os mesmos** — zero duplicação de código.
 
-### Inicializar o Airflow localmente
+### Desenvolvimento local — LocalExecutor (leve)
 ```bash
 # Inicializar (primeira vez)
 docker compose -f docker/docker-compose.yml --env-file docker/.env up airflow-init
 
 # Subir stack completa
 docker compose -f docker/docker-compose.yml --env-file docker/.env up -d
+```
+
+### Enterprise — CeleryExecutor (7 containers, 1 por serviço)
+
+| Container | Responsabilidade |
+|---|---|
+| `postgres` | Metadata DB do Airflow |
+| `redis` | Message broker — fila Celery |
+| `airflow-webserver` | UI apenas — nunca executa tasks |
+| `airflow-scheduler` | Orquestra e enfileira — nunca executa tasks |
+| `airflow-worker` | Executa as tasks (escalável horizontalmente) |
+| `airflow-triggerer` | Operadores assíncronos/deferidos |
+| `flower` | Dashboard de monitoramento dos workers (`:5555`) |
+
+```bash
+# Inicializar (primeira vez)
+docker compose -f docker/docker-compose.prod.yml --env-file docker/.env up airflow-init
+
+# Subir stack enterprise completa
+docker compose -f docker/docker-compose.prod.yml --env-file docker/.env up -d
+
+# Escalar workers horizontalmente
+docker compose -f docker/docker-compose.prod.yml --env-file docker/.env up -d --scale airflow-worker=3
+```
+
+Airflow UI: http://localhost:8080 | Flower (workers): http://localhost:5555
+
+```bash
+# Dev local (padrão)
 
 ### Uso recorrente
 ```bash
