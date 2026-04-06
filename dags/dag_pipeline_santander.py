@@ -76,9 +76,9 @@ with DAG(
     )
 
     t9 = DatabricksSubmitRunOperator(
-        task_id="t9_sdc",
+        task_id="t9_scd",
         databricks_conn_id="databricks_default",
-        json=make_task("t9_sdc", "jobs/job_sdc.py")
+        json=make_task("t9_scd", "jobs/job_scd.py")
     )
 
     t3 = DatabricksSubmitRunOperator(

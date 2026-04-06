@@ -5,31 +5,90 @@
 
 ---
 
-## Objetivo
+## Objetivo do Case
 
-Desenvolver uma arquitetura de dados completa simulando o pipeline de uma corretora digital inspirada na Santander Corretora. O projeto contempla ingestão, transformação, análise e governança de dados financeiros reais do mercado brasileiro, com foco em detecção de anomalias, score de risco de clientes e detecção de fraudes.
+O presente case tem por objetivo desenvolver uma arquitetura de dados completa para
+uma corretora digital inspirada na Santander Corretora, cobrindo desde a ingestão de dados
+brutos até a entrega de inteligência analítica para tomada de decisão.
+O pipeline processa dados reais do mercado financeiro brasileiro — cotações de ações da
+B3, indicadores econômicos do Banco Central e do World Bank, dados de clientes e
+transações simuladas em tempo real — aplicando as melhores práticas de engenharia de
+dados em ambiente de nuvem Azure com Databricks
 
 ---
 
-## Arquitetura
-[Fontes de Dados]
-Yahoo Finance | BCB | World Bank | Kaggle | Event Hub
-↓
-[Azure Data Factory]
-Ingestão batch (05:00 AM)
-↓
-[ADLS Gen2 — Bronze]
-Dados brutos particionados
-↓
-[Databricks — Silver]
-Limpeza, tipagem, Delta Lake
-↓
-[Databricks — Gold]
-Anomalias, fraudes, scores
-↓
-┌──────────────┼──────────────┐
-↓              ↓              ↓
-Unity Catalog  Azure SQL DB  Dashboard + Genie AI
+## Requisitos atendidos
+
+| Requisito | Solução implementada |
+|---|---|
+| Extração de dados | Yahoo Finance, BCB API, World Bank API, Kaggle, Azure Event Hub |
+| Ingestão em lote | Azure Data Factory — agendado diariamente às 05:00 |
+| Ingestão em streaming | Azure Event Hub (Kafka) + Structured Streaming |
+| Armazenamento | Azure ADLS Gen2 — Medallion Architecture (Bronze/Silver/Gold) |
+| Observabilidade | Tabela Gold de qualidade + Databricks Lakehouse Monitoring |
+| Segurança | Azure Key Vault, Service Principal OAuth2, RBAC |
+| Mascaramento LGPD | Hash SHA-256, mascaramento de sobrenome, sem CPF no pipeline |
+| Arquitetura escalável | Delta Lake, particionamento, auto-scaling Databricks |
+| Governança | Unity Catalog com catálogo, schemas e comentários |
+| CI/CD | GitHub Actions — três ambientes: dev, hk, prod |
+| Orquestração | Databricks Workflow (produção) + Apache Airflow Docker (dev) |
+| Análises financeiras | Anomalias Z-Score, score de risco, detecção de fraude, carteira |
+| IA Conversacional | Databricks Genie AI com instruções em português |
+| SCD Type 2 | Histórico de mudanças em perfil de risco e score de clientes |
+
+---
+
+## II. Arquitetura de Solução e Arquitetura Técnica
+
+### Visão geral da solução
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        FONTES DE DADOS                              │
+│  Yahoo Finance │ BCB API │ World Bank │ Kaggle │ Azure Event Hub    │
+└──────────────────────────┬──────────────────────┬───────────────────┘
+                                 │ Batch (ADF 05:00)     │ Streaming (Kafka)
+                                 ▼                       ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    BRONZE — ADLS Gen2                               │
+│         Dados brutos · Parquet/Delta · Particionado por data        │
+└──────────────────────────────────────┬──────────────────────────────┘
+                                                │ Databricks Spark
+                                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    SILVER — Delta Lake                              │
+│    Limpeza · Tipagem · Enriquecimento · LGPD · SCD Type 2           │
+└──────────────────────────────────────┬──────────────────────────────┘
+                                                │ Spark SQL · Window Functions
+                                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     GOLD — Delta Lake                               │
+│   Anomalias · Fraude · Score Risco · Carteira · Observabilidade     │
+└───────────────┬──────────────────────┬──────────────────────────────┘
+                    │                      │
+                    ▼                      ▼
+┌──────────────────────┐  ┌───────────────────────────────────────────┐
+│   Unity Catalog      │  │  Azure SQL Database · Dashboard · Genie AI│
+│   Governança · RBAC  │  │  Serving layer para consumo analítico      │
+└──────────────────────┘  └───────────────────────────────────────────┘
+```
+
+### Arquitetura técnica
+
+| Componente | Tecnologia | Nome no projeto |
+|---|---|---|
+| Data Lake | Azure ADLS Gen2 | stcasesantander |
+| Processamento | Azure Databricks 15.4 LTS | dbw-case-santander |
+| Orquestração Batch | Azure Data Factory | adf-case-santander |
+| Orquestração Streaming | Azure Event Hub (Kafka Standard) | evhcasesantander |
+| Segredos | Azure Key Vault | kv-case-santander |
+| Serving | Azure SQL Database | sqldb-case-santander |
+| Governança | Unity Catalog | case_santander |
+| CI/CD | GitHub Actions | .github/workflows/ci-cd.yml |
+| Orquestração local | Apache Airflow + Docker | docker/docker-compose.yml |
+| Formato de dados | Delta Lake (Open Format) | Camadas Silver e Gold |
+| IA Conversacional | Databricks Genie AI | Space: Corretora Santander |
+| Qualidade | Lakehouse Monitoring | 6 tabelas monitoradas |
 
 ---
 
@@ -53,135 +112,140 @@ Unity Catalog  Azure SQL DB  Dashboard + Genie AI
 
 ---
 
-## Fontes de Dados
+## Fontes de dados
 
-| Fonte | Dados | Registros |
-|---|---|---|
-| Yahoo Finance | 9 ações B3 (PETR4, VALE3, ITUB4, BBDC4, ABEV3, MGLU3, WEGE3, BBAS3, SANB11) | 8.530 |
-| Banco Central | Selic, Câmbio USD/BRL, IPCA | 3.068 |
-| World Bank | PIB anual, Desemprego | 59 |
-| Kaggle | 10.000 clientes reais anonimizados | 10.000 |
-| Event Hub | Transações streaming simuladas | 200 |
+| Fonte | Dados | Volume | Frequência |
+|---|---|---|---|
+| Yahoo Finance (yfinance) | 9 ações B3: PETR4, VALE3, ITUB4, BBDC4, ABEV3, MGLU3, WEGE3, BBAS3, SANB11 | 8.534 registros | Diária |
+| Banco Central — SGS API | Selic (cód. 11), Câmbio USD/BRL (cód. 1), IPCA (cód. 433) | 3.068 registros | Diária/Mensal |
+| World Bank API v2 | PIB crescimento anual, Taxa de desemprego Brasil | 59 registros | Anual |
+| Kaggle API | 10.000 clientes bancários reais anonimizados (Bank Churn) | 10.000 registros | Carga inicial |
+| Azure Event Hub | Transações financeiras simuladas (compra/venda de ações) | 200 eventos/lote | Streaming |
 
----
+## Unity Catalog — Estrutura de dados
 
-## Pipeline — Databricks Workflow
-t0_unity_catalog_bronze
-↓
-t1_extracao
-↓                    ↓
-t5_streaming    t6_clientes_ordens
-↓                    ↓
-t2_silver       t7_corretora_analises
-↓                    ↓
-└────────────→  t9_sdc
-                     ↓
-                t3_gold
-                     ↓
-           t10_streaming_gold
-           (fraude_streaming, anomalias_intraday,
-            volume_intraday, ranking_acoes_realtime)
-                     ↓               ↓
-     t8_lakehouse_monitoring    t_carga_sql
-                     ↓               ↓
-                t4_observabilidade
-
----
-
-## Unity Catalog
+```text
 case_santander/
 ├── bronze/
-│   ├── acoes       → 8.534
-│   ├── bcb         → 3.068
-│   ├── world_bank  →    59
-│   ├── kafka       →   200
-│   ├── clientes    → 10.000
-│   └── ordens      →  5.341
+│   ├── acoes        → 8.534 reg  · Parquet · Yahoo Finance
+│   ├── bcb          → 3.068 reg  · Delta   · BCB API
+│   ├── world_bank   →    59 reg  · Delta   · World Bank API
+│   ├── kafka        →   200 reg  · Delta   · Azure Event Hub
+│   ├── clientes     → 10.000 reg · Delta   · Kaggle (LGPD aplicada)
+│   └── ordens       →  5.341 reg · Delta   · Simulado Python
 ├── silver/
-│   ├── acoes       → 8.530
-│   ├── bcb         → 3.068
-│   ├── world_bank  →    59
-│   ├── streaming   →   200
-│   ├── clientes    → 10.000
-│   ├── clientes_sdc → histórico SDC Type 2
-│   └── ordens      →  5.341
+│   ├── acoes        → 8.530 reg  · variação%, empresa, setor
+│   ├── bcb          → 3.068 reg  · data tipada, 6 casas decimais
+│   ├── world_bank   →    59 reg  · ano int, mergeSchema
+│   ├── clientes     → 10.000 reg · faixa_etaria, score_categoria
+│   ├── clientes_scd → histórico  · SCD Type 2 (perfil_risco, score)
+│   ├── ordens       →  5.341 reg · data_ordem tipada
+│   └── streaming    →   200 reg  · alertas volume/preço
 └── gold/
-├── performance_acoes
-├── anomalias
-├── acoes_vs_cambio
-├── perfil_clientes
-├── ordens_consolidadas
-├── ranking_acoes_perfil
-├── posicao_clientes
-├── score_risco_clientes
-├── score_risco_sdc       → histórico SDC Type 2
-├── deteccao_fraude
-├── fraude_streaming      → fraude em transações streaming (t10)
-├── anomalias_intraday    → desvios de preço intradiários (t10)
-├── volume_intraday       → volume por ticker/hora (t10)
-├── ranking_acoes_realtime→ ranking em tempo real (t10)
-└── observabilidade
+     ├── anomalias            → 4.524 reg  · Z-Score por ticker
+     ├── performance_acoes    →    27 reg  · por setor/ano
+     ├── acoes_vs_cambio      → 4.507 reg  · cruzamento BCB
+     ├── posicao_clientes     → 3.931 reg  · P&L, situação
+     ├── score_risco_clientes →  1.000 reg · score ponderado
+     ├── score_risco_scd      → histórico  · SCD Type 2
+     ├── deteccao_fraude      → 5.341 reg  · 4 regras, Normal→Crítico
+     ├── perfil_clientes      →    45 reg  · segmentação
+     ├── ordens_consolidadas  →   893 reg  · volume por ticker
+     ├── ranking_acoes_perfil → variável
+     └── observabilidade      → crescente  · métricas de qualidade
+```
+
+## Fluxo de orquestração — Databricks Workflow
+
+Fluxo de orquestração — Databricks Workflow
+
+t0_unity_catalog_bronze
+             │
+             ▼
+        t1_extracao
+          │     │           
+          ▼     ▼
+t5_streaming  t6_clientes_ordens
+
+     │              │         │
+     ▼              ▼         ▼
+  t2_silver    t2_silver  t7_corretora_analises
+                              │
+                              ▼
+                           t9_scd              
+                    │         │
+                    ▼         ▼
+                t2_silver    t3_gold
+                              │
+                   ┌──────────┤
+                   ▼          ▼          
+             t8_lakehouse   t_sql
+             _monitoring        
+                   │          │
+                   └────┬─────┘
+                        ▼
+                  t4_observabilidade
+
+## Orquestração — dois ambientes com papéis distintos
+
+| Orquestrador | Ambiente | Trigger | Propósito |
+|---|---|---|---|
+| Databricks Workflow | Produção | Agendado 06:00 | Pipeline diário automatizado |
+| Apache Airflow + Docker | Desenvolvimento | Manual | Demonstração multi-cloud |
+
+Os jobs Python são os mesmos em ambos — zero duplicação de código. O Airflow chama os mesmos `jobs/*.py` via API REST do Databricks.
+
+## CI/CD — Multi-ambiente
+
+`feature/*` → `develop` → PR → `main`
+
+- `dev`: `/case-santander/dev` — deploy automático
+- `hk`: `/case-santander/hk` — revisão
+- `prod`: `/case-santander/prod` — revisão + 5 min
+
+Branch `main` protegida:
+- PR obrigatório
+- 1 aprovação necessária
+- CI deve passar
+- force push bloqueado
+
+
+## III. Explicação sobre o Case Desenvolvido
+
+### Pipeline de dados — camada Bronze
+
+A camada Bronze recebe os dados brutos de cada fonte sem transformações, preservando total fidelidade à origem. Os dados são particionados por data de extração e retidos por 30 dias via ADLS Lifecycle Policy.
+
+- Yahoo Finance: coleta 2 anos de histórico das 9 ações B3 monitoradas.
+- Banco Central: séries temporais de Selic, Câmbio USD/BRL e IPCA via API SGS. A partição usa `extracao=` (não `data=`) para evitar conflito com a coluna `data`.
+- World Bank: indicadores macroeconômicos anuais do Brasil.
+- Kaggle: 10.000 registros de clientes bancários reais, pseudonimizados na ingestão (`CustomerId → hash SHA-256`, `Surname → primeira letra + asteriscos`).
+- Azure Event Hub: transações financeiras simuladas via Producer Python, persistidas no Bronze via Consumer SDK e processadas posteriormente pelo Structured Streaming do Spark.
+
+### Pipeline de dados — camada Silver
+
+A camada Silver aplica limpeza, tipagem correta, enriquecimento e remoção de duplicatas.
+
+- Ações: cálculo de `variacao_diaria_pct` e `amplitude_diaria`, mapeamento de nome de empresa e setor B3.
+- BCB: conversão de datas de `dd/MM/yyyy` para `DateType`.
+- World Bank: uso de `mergeSchema: true` para compatibilidade entre execuções.
+- `silver.clientes_scd`: implementa SCD Type 2, rastreando mudanças em `perfil_risco`, `score_credito`, `faixa_saldo` e churn com campos `data_inicio`, `data_fim` (`9999-12-31` se atual) e `atual` (boolean).
+
+### Análises financeiras — camada Gold
+
+- `gold.anomalias`: Z-Score diário por ticker para identificar alta e queda anormal.
+- `gold.score_risco_clientes` / `gold.score_risco_scd`: score de risco agregado com pesos 40/20/20/20 e limites de crédito por categoria.
+- `gold.deteccao_fraude`: regras batch de fraude usando limite operacional, volume, preço e perfil de cliente.
+- `gold.posicao_clientes`: posições líquidas por cliente/ticker, P&L estimado e status da carteira.
+- `gold.observabilidade`: métricas de qualidade e monitoramento das tabelas Gold.
 
 ---
 
-## LGPD — Práticas Adotadas
-
-| Campo | Técnica |
-|---|---|
-| id_cliente | Hash SHA-256 (pseudonimização) |
-| sobrenome | Primeira letra + asteriscos |
-| CPF | Mascaramento parcial |
-| Credenciais | Azure Key Vault |
-| Bronze | Lifecycle Policy 30 dias |
-| Dado analítico | Separado do transacional |
-
----
-
-## Detecção de Anomalias e Fraudes
-
-### Anomalias de mercado — batch (Z-Score diário)
-Z > 2  → Alta Anormal
-Z < -2 → Queda Anormal
-Tabela: gold.anomalias
-
-### Anomalias intraday — streaming (Z-Score por hora)
-Z-Score = (preco_medio_hora - preco_medio_historico) / desvio_historico_R$
-Tabela: gold.anomalias_intraday
-
-### Detecção de fraude batch — por cliente
-Regra 1: Valor acima do limite operacional
-Regra 2: Volume suspeito (quantidade > 9.000)
-Regra 3: Preço atípico (> R$90 ou < R$12)
-Regra 4: Perfil incompatível com a operação
-Score: Normal → Médio → Alto → Crítico
-Tabela: gold.deteccao_fraude
-
-### Detecção de fraude streaming — por transação
-Regra 1: Quantidade > 9.000 unidades
-Regra 2: Preço > R$90 ou < R$12
-Regra 3: Valor total > R$500.000 por transação
-Regra 4: Desvio > 2× volatilidade histórica do ativo
-Score: Normal → Médio → Alto → Crítico
-Tabela: gold.fraude_streaming
-
----
-
-## Score de Risco
-score = (score_credito * 0.4) +
-(score_perfil  * 0.2) +
-(score_saldo   * 0.2) +
-(score_comportamento * 0.2)
-Baixo Risco:    → limite R$ 500.000
-Risco Moderado: → limite R$ 200.000
-Risco Alto:     → limite R$  50.000
-
----
-
-## SDC Type 2
+## SCD Type 2
 
 Implementado para rastrear mudanças históricas em:
-- `silver.clientes_sdc` → evolução do perfil de risco
-- `gold.score_risco_sdc` → evolução do score e limite operacional
+- `silver.clientes_scd` → evolução do perfil de risco
+- `gold.score_risco_scd` → evolução do score e limite operacional
 hash_cliente | perfil_risco | data_inicio | data_fim   | atual
 abc123       | Conservador  | 2024-01-01  | 2024-06-01 | false
 abc123       | Moderado     | 2024-06-01  | 9999-12-31 | true
@@ -273,101 +337,350 @@ Admin → Connections → Add Connection:
 
 ## Genie AI
 
-Agente conversacional integrado ao Unity Catalog:
-"Quais clientes têm maior risco de fraude?"
-"Compare performance das ações por setor"
-"Qual ação teve maior queda anormal?"
-"Qual o score médio de risco por perfil?"
+Agente conversacional integrado ao Unity Catalog. Consultas pré-configuradas:
+
+- "Quais clientes têm maior risco de fraude?"
+- "Compare performance das ações por setor"
+- "Qual ação teve maior queda anormal?"
+- "Qual o score médio de risco por perfil?"
 
 ---
 
-## Estrutura do Repositório
-case-santander-data-master/
-├── src/
-│   ├── config/settings.py
-│   ├── ingestion/
-│   │   ├── yahoo_finance.py
-│   │   ├── bcb.py
-│   │   └── world_bank.py
-│   ├── transformation/
-│   │   ├── silver_acoes.py
-│   │   ├── silver_bcb.py
-│   │   └── silver_world_bank.py
-│   ├── gold/
-│   │   ├── anomalias.py
-│   │   ├── performance.py
-│   │   ├── fraude.py
-│   │   └── streaming_gold.py
-│   ├── clients/
-│   │   └── sdc.py
-│   └── observability/
-│       └── monitoring.py
-├── jobs/
-│   ├── job_unity_catalog.py
-│   ├── job_extracao.py
-│   ├── job_silver.py
-│   ├── job_gold.py
-│   ├── job_observabilidade.py
-│   ├── job_streaming.py
-│   ├── job_streaming_to_gold.py
-│   ├── job_clientes_ordens.py
-│   ├── job_corretora_analises.py
-│   ├── job_lakehouse_monitoring.py
-│   ├── job_sdc.py
-│   └── job_carga_sql.py
-├── dags/
-│   └── dag_pipeline_santander.py
-├── docker/
-│   ├── Dockerfile
-│   └── docker-compose.yml
-├── tests/
-│   └── test_pipeline.py
-├── config/
-│   └── config.py
-├── .github/
-│   └── workflows/
-│       └── ci-cd.yml
-└── README.md
-
----
-
-## Como Reproduzir
+## IV. Reprodutibilidade da Arquitetura
 
 ### Pré-requisitos
+
+- Conta Azure ativa com permissões para criar recursos
+- Databricks Workspace (Standard ou Premium tier)
+- Python 3.11+
+- Docker Desktop
+- Git
+
+### 1. Clonar o repositório
+
 ```bash
+git clone https://github.com/thediegoaccount/case-santander-data-master.git
+cd case-santander-data-master
 pip install -r requirements.txt
 ```
 
-### Azure
+### 2. Criar infraestrutura Azure
 
-Resource Group: gr-data-master
-ADLS Gen2: stcasesantander (bronze, silver, gold)
-Databricks Workspace: dbw-case-santander
-Service Principal: sp-case-santander
-Key Vault: kv-case-santander
-Event Hub: evhcasesantander
-Azure SQL: sqldb-case-santander
-Azure Data Factory: adf-case-santander
+Execute os seguintes recursos no Portal Azure ou via CLI:
 
-
-### Databricks
-
-Cluster: 15.4 LTS, Standard_D4pds_v6
-Secret Scope → Key Vault
-Unity Catalog: case_santander
-Git folder: case-santander-data-master
-Workflow: pipeline-case-santander
-
-
-### Executar
 ```bash
-# Via Databricks Workflow
-pipeline-case-santander → Run now
+# Resource Group
+az group create --name gr-data-master --location eastus2
 
-# Via Airflow local
-docker compose -f docker/docker-compose.yml --env-file docker/.env up -d
-# Acessar localhost:8080 e ativar a DAG
+# Storage Account com ADLS Gen2
+az storage account create \
+     --name stcasesantander \
+     --resource-group gr-data-master \
+     --location eastus2 \
+     --sku Standard_LRS \
+     --kind StorageV2 \
+     --hierarchical-namespace true
+
+# Containers Bronze, Silver, Gold
+az storage container create --name bronze --account-name stcasesantander
+az storage container create --name silver --account-name stcasesantander
+az storage container create --name gold   --account-name stcasesantander
+
+# Key Vault
+az keyvault create \
+     --name kv-case-santander \
+     --resource-group gr-data-master \
+     --location eastus2
 ```
+
+### 3. Criar Service Principal e configurar permissões
+
+```bash
+# Criar Service Principal
+az ad sp create-for-rbac --name sp-case-santander --skip-assignment
+# Anote: appId (client_id), password (client_secret), tenant (tenant_id)
+
+# Atribuir role no ADLS
+az role assignment create \
+     --assignee <client_id> \
+     --role "Storage Blob Data Contributor" \
+     --scope "/subscriptions/<sub_id>/resourceGroups/gr-data-master/providers/Microsoft.Storage/storageAccounts/stcasesantander"
+```
+
+### 4. Adicionar segredos no Key Vault
+
+```bash
+az keyvault secret set --vault-name kv-case-santander --name client-id       --value "<client_id>"
+az keyvault secret set --vault-name kv-case-santander --name tenant-id       --value "<tenant_id>"
+az keyvault secret set --vault-name kv-case-santander --name client-secret   --value "<client_secret>"
+az keyvault secret set --vault-name kv-case-santander --name storage-account --value "stcasesantander"
+az keyvault secret set --vault-name kv-case-santander --name kaggle-username  --value "<seu_usuario_kaggle>"
+az keyvault secret set --vault-name kv-case-santander --name kaggle-key       --value "<sua_chave_kaggle>"
+```
+
+A chave Kaggle pode ser obtida em: https://www.kaggle.com/settings → API → Create New Token
+
+### 5. Configurar o cluster Databricks
+
+No Databricks Workspace, crie um cluster com as configurações abaixo:
+
+- Nome: cluster-case-santander
+- Databricks Runtime: 15.4 LTS (Spark 3.5.0, Scala 2.12)
+- Node type: Standard_D4pds_v6
+- Auto-termination: 20 minutos
+
+Adicione as seguintes configurações em Advanced Options → Spark Config:
+
+```
+spark.databricks.delta.schema.autoMerge.enabled true
+spark.hadoop.fs.azure.account.auth.type.stcasesantander.dfs.core.windows.net OAuth
+spark.hadoop.fs.azure.account.oauth.provider.type.stcasesantander.dfs.core.windows.net org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider
+spark.hadoop.fs.azure.account.oauth2.client.id.stcasesantander.dfs.core.windows.net {{secrets/kv-case-santander/client-id}}
+spark.hadoop.fs.azure.account.oauth2.client.secret.stcasesantander.dfs.core.windows.net {{secrets/kv-case-santander/client-secret}}
+spark.hadoop.fs.azure.account.oauth2.client.endpoint.stcasesantander.dfs.core.windows.net https://login.microsoftonline.com/<tenant_id>/oauth2/token
+```
+
+Adicione as bibliotecas em Libraries → Install New → PyPI:
+
+- yfinance
+- requests
+- azure-eventhub
+
+### 6. Criar Secret Scope no Databricks
+
+Acesse a URL abaixo (substituindo pelo seu host):
+
+https://<seu-workspace>.azuredatabricks.net/#secrets/createScope
+
+Preencha:
+
+- Scope Name: kv-case-santander
+- DNS Name: https://kv-case-santander.vault.azure.net/
+- Resource ID: <resource_id_do_key_vault>
+
+### 7. Configurar Unity Catalog
+
+Execute no Databricks via notebook SQL:
+
+```sql
+CREATE CATALOG IF NOT EXISTS case_santander
+COMMENT 'Catalogo principal do case Academia Santander';
+
+CREATE SCHEMA IF NOT EXISTS case_santander.bronze COMMENT 'Dados brutos extraidos das fontes';
+CREATE SCHEMA IF NOT EXISTS case_santander.silver COMMENT 'Dados limpos e transformados';
+CREATE SCHEMA IF NOT EXISTS case_santander.gold   COMMENT 'Dados prontos para analise e consumo';
+```
+
+### 8. Conectar repositório Git ao Databricks
+
+Databricks Workspace → Repos → Add Repo
+
+- URL: https://github.com/thediegoaccount/case-santander-data-master
+- Branch: main
+
+### 9. Criar o Databricks Workflow
+
+Jobs e Pipelines → Create Job
+
+Nome: pipeline-case-santander
+
+Tasks (em ordem):
+
+- t0_unity_catalog_bronze → jobs/job_unity_catalog.py (Git)
+- t1_extracao → jobs/job_extracao.py (Git) depende: t0
+- t5_streaming → jobs/job_streaming.py (Git) depende: t1
+- t6_clientes_ordens → jobs/job_clientes_ordens.py (Git) depende: t1
+- t2_silver → jobs/job_silver.py (Git) depende: t5, t6
+- t7_corretora_analises → jobs/job_corretora_analises.py (Git) depende: t6
+- t9_scd → jobs/job_scd.py (Git) depende: t7
+- t3_gold → jobs/job_gold.py (Git) depende: t2, t9
+- t8_lakehouse_monitoring → jobs/job_lakehouse_monitoring.py (Git) depende: t3
+- t_sql → jobs/job_carga_sql.py (Git) depende: t3
+- t4_observabilidade → jobs/job_observabilidade.py (Git) depende: t8, t_sql
+
+Agendamento: 0 6 * * * (06:00, America/Sao_Paulo)
+
+Padrão obrigatório em todos os jobs: cada jobs/*.py inicia com:
+
+```python
+import sys
+sys.path.insert(0, "/Workspace/Users/<seu-email>/case-santander-data-master")
+```
+
+### 10. Executar o pipeline
+
+```bash
+# Via Databricks CLI
+databricks jobs run-now --job-id <job_id>
+
+# Via UI
+pipeline-case-santander → Run now
+```
+
+### 11. Configurar Databricks Connect (desenvolvimento local)
+
+```bash
+# Criar ambiente virtual
+python3 -m venv ~/.venv/databricks
+source ~/.venv/databricks/bin/activate
+
+# Instalar dependências
+pip install -r requirements.txt
+
+# Configurar
+databricks configure --token
+# Host: https://<workspace>.azuredatabricks.net
+# Token: <seu_token>
+
+echo "cluster_id = <cluster_id>" >> ~/.databrickscfg
+
+# Testar
+databricks-connect test
+
+# Executar testes
+pytest tests/ -v
+```
+
+### 12. Configurar Apache Airflow com Docker
+
+Crie o arquivo docker/.env:
+
+```bash
+cat > docker/.env << 'EOF'
+DATABRICKS_HOST=https://<seu-workspace>.azuredatabricks.net
+DATABRICKS_TOKEN=<seu_token>
+EOF
+```
+
+Execute:
+
+```bash
+# Primeira vez — inicializar banco e criar usuário admin
+docker compose -f docker/docker-compose.yml --env-file docker/.env up airflow-init
+
+# Subir a stack completa
+docker compose -f docker/docker-compose.yml --env-file docker/.env up -d
+
+# Acessar
+# http://localhost:8080
+# Login: admin / admin
+```
+
+Após acessar, configure a conexão Databricks:
+
+Admin → Connections → Add Connection
+
+- Connection Id: databricks_default
+- Connection Type: Databricks
+- Host: https://<seu-workspace>.azuredatabricks.net
+- Password: <seu_token>
+
+Comandos de uso recorrente:
+
+```bash
+# Verificar status
+docker compose -f docker/docker-compose.yml --env-file docker/.env ps
+
+# Ver logs
+docker compose -f docker/docker-compose.yml --env-file docker/.env logs -f
+
+# Derrubar
+docker compose -f docker/docker-compose.yml --env-file docker/.env down
+```
+
+### 13. Configurar CI/CD no GitHub
+
+Crie três ambientes no repositório GitHub:
+
+Settings → Environments → New environment
+
+Ambiente: dev
+
+- Secrets: DATABRICKS_HOST, DATABRICKS_TOKEN
+- Variables: DEPLOY_PATH = /case-santander/dev
+
+Ambiente: hk
+
+- Secrets: DATABRICKS_HOST, DATABRICKS_TOKEN
+- Variables: DEPLOY_PATH = /case-santander/hk
+- Protection: Required reviewers
+
+Ambiente: prod
+
+- Secrets: DATABRICKS_HOST, DATABRICKS_TOKEN
+- Variables: DEPLOY_PATH = /case-santander/prod
+- Protection: Required reviewers + Wait timer 5 min
+
+O CI/CD dispara automaticamente a cada push nas branches develop (→ dev) e main (→ hk e prod).
+
+### Estrutura do Repositório
+
+```
+case-santander-data-master/
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yml
+├── config/
+│   └── config.py
+├── dags/
+│   └── dag_pipeline_santander.py
+├── docs/
+│   ├── technical-reference.md
+│   └── unity-catalog.md
+├── docker/
+│   ├── Dockerfile
+│   └── docker-compose.yml
+├── jobs/
+│   ├── job_unity_catalog.py
+│   ├── job_extracao.py
+│   ├── job_streaming.py
+│   ├── job_clientes_ordens.py
+│   ├── job_silver.py
+│   ├── job_corretora_analises.py
+│   ├── job_scd.py
+│   ├── job_gold.py
+│   ├── job_lakehouse_monitoring.py
+│   ├── job_carga_sql.py
+│   └── job_observabilidade.py
+├── requirements-airflow.txt
+├── requirements.txt
+├── src/
+│   ├── config/
+│   │   └── settings.py
+│   ├── ingestion/
+│   │   ├── bcb.py
+│   │   ├── world_bank.py
+│   │   └── yahoo_finance.py
+│   ├── gold/
+│   │   ├── anomalias.py
+│   │   ├── fraude.py
+│   │   └── performance.py
+│   ├── clients/
+│   │   └── scd.py
+│   ├── observability/
+│   │   └── monitoring.py
+│   └── transformation/
+│       ├── silver_acoes.py
+│       ├── silver_bcb.py
+│       └── silver_world_bank.py
+└── tests/
+     └── test_pipeline.py
+
+### Dependências
+
+**requirements.txt**
+
+- yfinance>=0.2.37
+- requests>=2.31.0
+- azure-eventhub>=5.15.1
+- databricks-connect==15.4
+- databricks-sdk>=0.20.0
+- pytest>=7.4.0
+
+**requirements-airflow.txt** (usado no Dockerfile)
+
+- apache-airflow-providers-databricks==4.7.0
+- databricks-sdk>=0.20.0
 
 ---
 
@@ -384,7 +697,6 @@ docker compose -f docker/docker-compose.yml --env-file docker/.env up -d
 ---
 
 ## Melhorias Futuras
-→ Integração com API oficial da B3
 → Motor de matching de ordens em tempo real
 → Relatório de IR automatizado
 → Azure Monitor + Log Analytics
