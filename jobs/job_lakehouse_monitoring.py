@@ -25,8 +25,13 @@ def main():
         "case_santander.gold.posicao_clientes",
         "case_santander.gold.score_risco_clientes",
         "case_santander.gold.deteccao_fraude",
+        "case_santander.gold.fraude_streaming",
+        "case_santander.gold.anomalias_intraday",
+        "case_santander.gold.volume_intraday",
+        "case_santander.gold.ranking_acoes_realtime",
         "case_santander.silver.clientes",
-        "case_santander.silver.ordens"
+        "case_santander.silver.ordens",
+        "case_santander.silver.streaming",
     ]
 
     print("Verificando monitores Lakehouse Monitoring...")
