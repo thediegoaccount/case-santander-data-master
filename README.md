@@ -140,19 +140,23 @@ case_santander/
 │   ├── clientes     → 10.000 reg · faixa_etaria, score_categoria
 │   ├── clientes_scd → histórico  · SCD Type 2 (perfil_risco, score)
 │   ├── ordens       →  5.341 reg · data_ordem tipada
-│   └── streaming    →   200 reg  · alertas volume/preço
+│   └── streaming    →   200 reg  · alertas volume/preço (CDC habilitado)
 └── gold/
-     ├── anomalias            → 4.524 reg  · Z-Score por ticker
-     ├── performance_acoes    →    27 reg  · por setor/ano
-     ├── acoes_vs_cambio      → 4.507 reg  · cruzamento BCB
-     ├── posicao_clientes     → 3.931 reg  · P&L, situação
-     ├── score_risco_clientes →  1.000 reg · score ponderado
-     ├── score_risco_scd      → histórico  · SCD Type 2
-     ├── deteccao_fraude      → 5.341 reg  · 4 regras, Normal→Crítico
-     ├── perfil_clientes      →    45 reg  · segmentação
-     ├── ordens_consolidadas  →   893 reg  · volume por ticker
-     ├── ranking_acoes_perfil → variável
-     └── observabilidade      → crescente  · métricas de qualidade
+     ├── anomalias              → 4.524 reg  · Z-Score por ticker
+     ├── performance_acoes      →    27 reg  · por setor/ano
+     ├── acoes_vs_cambio        → 4.507 reg  · cruzamento BCB
+     ├── posicao_clientes       → 3.931 reg  · P&L, situação
+     ├── score_risco_clientes   →  1.000 reg · score ponderado
+     ├── score_risco_scd        → histórico  · SCD Type 2
+     ├── deteccao_fraude        → 5.341 reg  · 4 regras, Normal→Crítico
+     ├── perfil_clientes        →    45 reg  · segmentação
+     ├── ordens_consolidadas    →   893 reg  · volume por ticker
+     ├── ranking_acoes_perfil   → variável
+     ├── fraude_streaming       → variável   · fraude em tempo real (via silver.streaming)
+     ├── anomalias_intraday     → variável   · Z-Score intraday (via silver.streaming)
+     ├── volume_intraday        → variável   · volume agregado por ticker/hora (via silver.streaming)
+     ├── ranking_acoes_realtime → variável   · ranking por volume em tempo real (via silver.streaming)
+     └── observabilidade        → crescente  · métricas de qualidade
 ```
 
 ## Fluxo de orquestração — Databricks Workflow
@@ -233,11 +237,18 @@ A camada Silver aplica limpeza, tipagem correta, enriquecimento e remoção de d
 
 ### Análises financeiras — camada Gold
 
+**Batch (processamento diário):**
 - `gold.anomalias`: Z-Score diário por ticker para identificar alta e queda anormal.
 - `gold.score_risco_clientes` / `gold.score_risco_scd`: score de risco agregado com pesos 40/20/20/20 e limites de crédito por categoria.
 - `gold.deteccao_fraude`: regras batch de fraude usando limite operacional, volume, preço e perfil de cliente.
 - `gold.posicao_clientes`: posições líquidas por cliente/ticker, P&L estimado e status da carteira.
 - `gold.observabilidade`: métricas de qualidade e monitoramento das tabelas Gold.
+
+**Streaming (derivadas de `silver.streaming` via CDC):**
+- `gold.fraude_streaming`: detecção de fraude em tempo real com as mesmas 4 regras do batch, aplicadas sobre transações do Event Hub.
+- `gold.anomalias_intraday`: Z-Score calculado por ticker dentro do dia, identificando picos de preço ou volume atípicos em janelas curtas.
+- `gold.volume_intraday`: volume total negociado agregado por ticker e hora, base para alertas de liquidez.
+- `gold.ranking_acoes_realtime`: ranking de ações por volume intraday em tempo real, enriquecido com dados de performance histórica via Broadcast Join.
 
 ---
 
