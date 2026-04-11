@@ -1,156 +1,519 @@
-name: CI/CD Pipeline - Case Santander
+# ─────────────────────────────────────────────────────────────────────────────
+# CI/CD Pipeline — Case Santander Data
+#
+# Fluxo por branch:
+#   develop  →  quality → test + security  → deploy-dev
+#   main     →  quality → test + security  → build → deploy-hk → deploy-prod
+#
+# Environments (configurar em Settings > Environments):
+#   dev   → deploy automático ao merge em develop
+#   hk    → deploy automático ao merge em main
+#   prod  → requer aprovação manual (required reviewers)
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: CI/CD Pipeline — Case Santander Data
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main ]
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Forçar deploy em ambiente específico"
+        required: true
+        default: dev
+        type: choice
+        options: [dev, hk, prod]
 
+# Cancela runs em andamento para o mesmo branch/PR ao receber novo push
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  DATABRICKS_CLI_VERSION: "0.218.0"
+
+# ─────────────────────────────────────────────────────────────────────────────
 jobs:
-  ci:
-    name: Integracao Continua
+
+  # ── 1. QUALITY GATE ──────────────────────────────────────────────────────────
+  # Lint, formatação e ordenação de imports
+  # Bloqueia o pipeline antes de qualquer custo computacional maior
+  quality:
+    name: "Quality Gate"
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout codigo
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Configurar Python
-        uses: actions/setup-python@v4
+      - name: Configurar Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
-      - name: Instalar dependencias
-        run: |
-          pip install pytest yfinance requests azure-eventhub
+      - name: Instalar ferramentas de qualidade
+        run: pip install ruff==0.4.4 black==24.4.2 isort==5.13.2
 
-      - name: Rodar testes
-        run: pytest tests/ -v
+      - name: "Lint — ruff"
+        run: ruff check src/ jobs/ tests/ --output-format=github
 
-      - name: Validar modulos src/
-        run: |
-          echo "Validando modulos..."
-          for f in src/**/*.py jobs/*.py; do
-            python -m py_compile "$f" && echo "OK: $f" || echo "ERRO: $f"
-          done
+      - name: "Formato — black (check-only)"
+        run: black --check --diff src/ jobs/ tests/
 
-  deploy-dev:
-    name: Deploy Development
-    needs: ci
+      - name: "Imports — isort (check-only)"
+        run: isort --check-only --diff src/ jobs/ tests/
+
+  # ── 2. SECURITY SCAN ─────────────────────────────────────────────────────────
+  # SAST (bandit) + vulnerabilidades de dependências (safety)
+  # Executa em paralelo com os testes — não bloqueia, mas publica artefatos
+  security:
+    name: "Security Scan"
     runs-on: ubuntu-latest
-    environment: dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Instalar scanners
+        run: pip install bandit==1.7.8 safety==3.2.0
+
+      - name: "SAST — bandit"
+        run: |
+          bandit -r src/ jobs/ -f json -o bandit-report.json \
+            --severity-level medium || true
+
+      - name: "Dependências — safety"
+        run: |
+          safety check -r requirements.txt \
+            --json --output safety-report.json || true
+
+      - name: Publicar resumo de segurança
+        if: always()
+        run: |
+          echo "## Segurança" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Bandit
+          if [ -f bandit-report.json ]; then
+            HIGH=$(python3 -c "
+          import json, sys
+          d = json.load(open('bandit-report.json'))
+          h = len([r for r in d.get('results',[]) if r['issue_severity']=='HIGH'])
+          m = len([r for r in d.get('results',[]) if r['issue_severity']=='MEDIUM'])
+          print(f'HIGH={h} MEDIUM={m}')
+            " 2>/dev/null || echo "HIGH=? MEDIUM=?")
+            echo "**SAST (bandit):** $HIGH" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Safety
+          if [ -f safety-report.json ]; then
+            VULNS=$(python3 -c "
+          import json
+          d = json.load(open('safety-report.json'))
+          print(len(d.get('vulnerabilities', [])))
+            " 2>/dev/null || echo "?")
+            echo "**Vulnerabilidades de dependências (safety):** $VULNS encontradas" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload relatórios de segurança
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports-${{ github.run_number }}
+          path: |
+            bandit-report.json
+            safety-report.json
+          retention-days: 30
+
+  # ── 3. TESTES E COBERTURA ────────────────────────────────────────────────────
+  # Executa após quality gate, em paralelo com security scan
+  test:
+    name: "Testes & Cobertura"
+    runs-on: ubuntu-latest
+    needs: [quality]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Instalar dependências
+        run: |
+          pip install \
+            pytest pytest-cov pytest-html \
+            yfinance requests azure-eventhub
+
+      - name: Executar testes com cobertura
+        run: |
+          pytest tests/ -v \
+            --cov=src \
+            --cov-report=xml:coverage.xml \
+            --cov-report=html:coverage-html \
+            --cov-report=term-missing \
+            --html=test-report.html \
+            --self-contained-html
+
+      - name: Validar sintaxe — src/ e jobs/
+        run: |
+          echo "## Validação de Sintaxe" >> $GITHUB_STEP_SUMMARY
+          echo "| Arquivo | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          ERRORS=0
+          for f in src/**/*.py jobs/*.py; do
+            if python -m py_compile "$f" 2>/dev/null; then
+              echo "| \`$f\` | ✅ OK |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| \`$f\` | ❌ ERRO |" >> $GITHUB_STEP_SUMMARY
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+          [ $ERRORS -eq 0 ] || exit 1
+
+      - name: Publicar cobertura no summary
+        if: always()
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Cobertura de Código" >> $GITHUB_STEP_SUMMARY
+          python3 -c "
+          import xml.etree.ElementTree as ET
+          root = ET.parse('coverage.xml').getroot()
+          rate = float(root.attrib.get('line-rate', 0)) * 100
+          lines = root.attrib.get('lines-valid', '?')
+          covered = root.attrib.get('lines-covered', '?')
+          bar = '█' * int(rate // 10) + '░' * (10 - int(rate // 10))
+          print(f'**{rate:.1f}%** [{bar}]  ({covered}/{lines} linhas)')
+          " >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "Coverage indisponível" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload artefatos de teste
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ github.run_number }}
+          path: |
+            test-report.html
+            coverage.xml
+            coverage-html/
+          retention-days: 14
+
+  # ── 4. BUILD — VALIDAÇÃO DOCKER ──────────────────────────────────────────────
+  # Valida docker-compose e constrói a imagem sem publicar
+  # Só executa em branches de deploy (develop/main)
+  build:
+    name: "Build Docker"
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    if: |
+      github.event_name != 'pull_request' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validar docker-compose.prod.yml
+        run: |
+          docker compose -f docker/docker-compose.prod.yml config --quiet
+          echo "✅ docker-compose.prod.yml válido" >> $GITHUB_STEP_SUMMARY
+
+      - name: Build imagem Airflow (sem push)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.prod
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: santander-airflow:${{ github.sha }}
+
+      - name: Publicar digest no summary
+        run: |
+          echo "## Build Docker" >> $GITHUB_STEP_SUMMARY
+          echo "- **Imagem:** \`santander-airflow:${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ✅ Build OK (sem push — apenas validação)" >> $GITHUB_STEP_SUMMARY
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # DEPLOY JOBS
+  # Compartilham a mesma lógica via script inline reutilizável
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  # ── 5. DEPLOY DEV ────────────────────────────────────────────────────────────
+  deploy-dev:
+    name: "Deploy → DEV"
+    runs-on: ubuntu-latest
+    needs: [build]
+    environment:
+      name: dev
+      url: ${{ vars.DATABRICKS_WORKSPACE_URL }}
     if: github.ref == 'refs/heads/develop'
     steps:
-      - name: Checkout codigo
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
       - name: Instalar Databricks CLI
-        run: pip install databricks-cli
+        run: pip install databricks-cli==${{ env.DATABRICKS_CLI_VERSION }}
 
-      - name: Deploy Dev
+      - name: Autenticar no Databricks
         env:
-          DATABRICKS_HOST:  ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-          DEPLOY_PATH:      ${{ secrets.DEPLOY_PATH }}
         run: |
           databricks configure --token <<< "$DATABRICKS_HOST
           $DATABRICKS_TOKEN"
 
-          # Deploy src/
-          databricks workspace mkdirs $DEPLOY_PATH/src/config
-          databricks workspace mkdirs $DEPLOY_PATH/src/ingestion
-          databricks workspace mkdirs $DEPLOY_PATH/src/transformation
-          databricks workspace mkdirs $DEPLOY_PATH/src/gold
-          databricks workspace mkdirs $DEPLOY_PATH/src/clients
-          databricks workspace mkdirs $DEPLOY_PATH/src/observability
-          databricks workspace mkdirs $DEPLOY_PATH/src/streaming
-
-          for f in src/**/*.py; do
-            dir=$(dirname $f)
-            databricks workspace import "$f" \
-              "$DEPLOY_PATH/$f" \
-              --language PYTHON --overwrite
+      - name: Provisionar diretórios no Workspace
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          for dir in src/config src/ingestion src/transformation src/gold \
+                     src/clients src/observability src/streaming jobs; do
+            databricks workspace mkdirs "$DEPLOY_PATH/$dir"
           done
 
-          # Deploy jobs/
-          databricks workspace mkdirs $DEPLOY_PATH/jobs
-          for f in jobs/*.py; do
-            databricks workspace import "$f" \
-              "$DEPLOY_PATH/$f" \
-              --language PYTHON --overwrite
+      - name: Deploy arquivos Python
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          echo "## Deploy DEV" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Autor:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp:** $(date -u '+%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Arquivo | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          DEPLOYED=0; ERRORS=0
+          for f in src/**/*.py jobs/*.py; do
+            if databricks workspace import "$f" "$DEPLOY_PATH/$f" \
+                --language PYTHON --overwrite 2>/dev/null; then
+              echo "| \`$f\` | ✅ |" >> $GITHUB_STEP_SUMMARY
+              DEPLOYED=$((DEPLOYED + 1))
+            else
+              echo "| \`$f\` | ❌ |" >> $GITHUB_STEP_SUMMARY
+              ERRORS=$((ERRORS + 1))
+            fi
           done
 
-          echo "Deploy Dev concluido em $DEPLOY_PATH"
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Total: $DEPLOYED deployados | $ERRORS erros**" >> $GITHUB_STEP_SUMMARY
+          [ $ERRORS -eq 0 ] || exit 1
 
+  # ── 6. DEPLOY HK (HOMOLOGAÇÃO) ───────────────────────────────────────────────
   deploy-hk:
-    name: Deploy HK
-    needs: deploy-dev
+    name: "Deploy → HK"
     runs-on: ubuntu-latest
-    environment: hk
+    needs: [build]
+    environment:
+      name: hk
+      url: ${{ vars.DATABRICKS_WORKSPACE_URL }}
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Checkout codigo
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
       - name: Instalar Databricks CLI
-        run: pip install databricks-cli
+        run: pip install databricks-cli==${{ env.DATABRICKS_CLI_VERSION }}
 
-      - name: Deploy HK
+      - name: Autenticar no Databricks
         env:
-          DATABRICKS_HOST:  ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-          DEPLOY_PATH:      ${{ secrets.DEPLOY_PATH }}
         run: |
           databricks configure --token <<< "$DATABRICKS_HOST
           $DATABRICKS_TOKEN"
 
-          databricks workspace mkdirs $DEPLOY_PATH/src/config
-          databricks workspace mkdirs $DEPLOY_PATH/src/ingestion
-          databricks workspace mkdirs $DEPLOY_PATH/src/transformation
-          databricks workspace mkdirs $DEPLOY_PATH/src/gold
-          databricks workspace mkdirs $DEPLOY_PATH/src/observability
-          databricks workspace mkdirs $DEPLOY_PATH/jobs
-
-          for f in src/**/*.py jobs/*.py; do
-            databricks workspace import "$f" \
-              "$DEPLOY_PATH/$f" \
-              --language PYTHON --overwrite
+      - name: Provisionar diretórios no Workspace
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          for dir in src/config src/ingestion src/transformation src/gold \
+                     src/observability jobs; do
+            databricks workspace mkdirs "$DEPLOY_PATH/$dir"
           done
 
-          echo "Deploy HK concluido em $DEPLOY_PATH"
+      - name: Deploy arquivos Python
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          echo "## Deploy HK" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Autor:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp:** $(date -u '+%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Arquivo | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
 
+          DEPLOYED=0; ERRORS=0
+          for f in src/**/*.py jobs/*.py; do
+            if databricks workspace import "$f" "$DEPLOY_PATH/$f" \
+                --language PYTHON --overwrite 2>/dev/null; then
+              echo "| \`$f\` | ✅ |" >> $GITHUB_STEP_SUMMARY
+              DEPLOYED=$((DEPLOYED + 1))
+            else
+              echo "| \`$f\` | ❌ |" >> $GITHUB_STEP_SUMMARY
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Total: $DEPLOYED deployados | $ERRORS erros**" >> $GITHUB_STEP_SUMMARY
+          [ $ERRORS -eq 0 ] || exit 1
+
+  # ── 7. DEPLOY PROD (APROVAÇÃO MANUAL) ────────────────────────────────────────
+  # Requer aprovação de reviewer configurado no Environment "prod"
+  # Settings > Environments > prod > Required reviewers
   deploy-prod:
-    name: Deploy Production
-    needs: deploy-hk
+    name: "Deploy → PROD"
     runs-on: ubuntu-latest
-    environment: prod
+    needs: [deploy-hk]
+    environment:
+      name: prod
+      url: ${{ vars.DATABRICKS_WORKSPACE_URL }}
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Checkout codigo
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
       - name: Instalar Databricks CLI
-        run: pip install databricks-cli
+        run: pip install databricks-cli==${{ env.DATABRICKS_CLI_VERSION }}
 
-      - name: Deploy Prod
+      - name: Autenticar no Databricks
         env:
-          DATABRICKS_HOST:  ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-          DEPLOY_PATH:      ${{ secrets.DEPLOY_PATH }}
         run: |
           databricks configure --token <<< "$DATABRICKS_HOST
           $DATABRICKS_TOKEN"
 
-          databricks workspace mkdirs $DEPLOY_PATH/src/config
-          databricks workspace mkdirs $DEPLOY_PATH/src/ingestion
-          databricks workspace mkdirs $DEPLOY_PATH/src/transformation
-          databricks workspace mkdirs $DEPLOY_PATH/src/gold
-          databricks workspace mkdirs $DEPLOY_PATH/src/observability
-          databricks workspace mkdirs $DEPLOY_PATH/jobs
-
-          for f in src/**/*.py jobs/*.py; do
-            databricks workspace import "$f" \
-              "$DEPLOY_PATH/$f" \
-              --language PYTHON --overwrite
+      - name: Provisionar diretórios no Workspace
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          for dir in src/config src/ingestion src/transformation src/gold \
+                     src/observability jobs; do
+            databricks workspace mkdirs "$DEPLOY_PATH/$dir"
           done
 
-          echo "Deploy Prod concluido em $DEPLOY_PATH"
+      - name: Deploy arquivos Python
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          echo "## Deploy PROD" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Autor:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp:** $(date -u '+%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Arquivo | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          DEPLOYED=0; ERRORS=0
+          for f in src/**/*.py jobs/*.py; do
+            if databricks workspace import "$f" "$DEPLOY_PATH/$f" \
+                --language PYTHON --overwrite 2>/dev/null; then
+              echo "| \`$f\` | ✅ |" >> $GITHUB_STEP_SUMMARY
+              DEPLOYED=$((DEPLOYED + 1))
+            else
+              echo "| \`$f\` | ❌ |" >> $GITHUB_STEP_SUMMARY
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Total: $DEPLOYED deployados | $ERRORS erros**" >> $GITHUB_STEP_SUMMARY
+          [ $ERRORS -eq 0 ] || exit 1
+
+      - name: Criar Release no GitHub
+        uses: ncipollo/release-action@v1
+        with:
+          tag: "v${{ github.run_number }}"
+          name: "Release v${{ github.run_number }}"
+          body: |
+            ## Deploy automatizado para PROD
+
+            - **Commit:** `${{ github.sha }}`
+            - **Branch:** `${{ github.ref_name }}`
+            - **Autor:** ${{ github.actor }}
+            - **Pipeline:** [Run #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          token: ${{ secrets.GITHUB_TOKEN }}
+          makeLatest: true
+
+  # ── 8. NOTIFICAÇÃO SLACK ─────────────────────────────────────────────────────
+  # Notifica canal de dados após qualquer deploy (sucesso ou falha)
+  # Configure SLACK_WEBHOOK_URL em Settings > Secrets
+  notify:
+    name: "Notificação"
+    runs-on: ubuntu-latest
+    needs: [deploy-dev, deploy-hk, deploy-prod]
+    if: |
+      always() && (
+        needs.deploy-dev.result != 'skipped' ||
+        needs.deploy-hk.result  != 'skipped' ||
+        needs.deploy-prod.result != 'skipped'
+      )
+    steps:
+      - name: Enviar notificação Slack
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          # Determina qual deploy rodou e o resultado geral
+          if echo "${{ toJson(needs) }}" | grep -q '"result": "failure"'; then
+            ICON="❌"; COLOR="danger"; STATUS="FALHOU"
+          else
+            ICON="✅"; COLOR="good"; STATUS="SUCESSO"
+          fi
+
+          BRANCH="${{ github.ref_name }}"
+          case "$BRANCH" in
+            develop) ENV="DEV" ;;
+            main)    ENV="HK → PROD" ;;
+            *)       ENV="$BRANCH" ;;
+          esac
+
+          curl -s -X POST "$SLACK_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"attachments\": [{
+                \"color\": \"$COLOR\",
+                \"title\": \"$ICON Deploy Santander Data — $ENV — $STATUS\",
+                \"fields\": [
+                  {\"title\": \"Branch\",   \"value\": \"\`$BRANCH\`\",                    \"short\": true},
+                  {\"title\": \"Commit\",   \"value\": \"\`${GITHUB_SHA::8}\`\",            \"short\": true},
+                  {\"title\": \"Autor\",    \"value\": \"${{ github.actor }}\",             \"short\": true},
+                  {\"title\": \"Pipeline\", \"value\": \"<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Run #${{ github.run_number }}>\", \"short\": true}
+                ],
+                \"footer\": \"GitHub Actions · Santander Data\"
+              }]
+            }" || echo "⚠️ Slack webhook não configurado — pulando notificação"
