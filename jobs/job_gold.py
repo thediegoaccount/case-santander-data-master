@@ -32,7 +32,7 @@ def main():
     total_fraudes     = detectar_fraude(spark)
 
     fim = datetime.now()
-    print(f"\n=== JOB GOLD CONCLUIDO ===")
+    print("\n=== JOB GOLD CONCLUIDO ===")
     print(f"Anomalias:   {total_anomalias}")
     print(f"Performance: {total_performance} registros")
     print(f"Fraudes:     {total_fraudes} criticos")

@@ -20,7 +20,7 @@ def main():
     total_score    = aplicar_scd_score_risco(spark)
 
     fim = datetime.now()
-    print(f"\n=== JOB SCD CONCLUIDO ===")
+    print("\n=== JOB SCD CONCLUIDO ===")
     print(f"Clientes SCD:    {total_clientes} registros ativos")
     print(f"Score Risco SCD: {total_score} registros ativos")
     print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")

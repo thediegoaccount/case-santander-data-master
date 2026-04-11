@@ -8,7 +8,6 @@ Ou via Databricks Workflow:
 import sys
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
-from databricks.connect import DatabricksSession
 from databricks.sdk import WorkspaceClient
 from datetime import datetime
 
@@ -17,8 +16,7 @@ def main():
     inicio = datetime.now()
     print(f"=== JOB LAKEHOUSE MONITORING INICIADO: {inicio} ===")
 
-    spark = DatabricksSession.builder.getOrCreate()
-    w     = WorkspaceClient()
+    w = WorkspaceClient()
 
     tabelas = [
         "case_santander.gold.anomalias",
@@ -52,7 +50,7 @@ def main():
                 print(f"  ❌ Erro em {tabela}: {e}")
 
     fim = datetime.now()
-    print(f"\n=== JOB LAKEHOUSE MONITORING CONCLUIDO ===")
+    print("\n=== JOB LAKEHOUSE MONITORING CONCLUIDO ===")
     print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
 

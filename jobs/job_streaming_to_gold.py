@@ -94,7 +94,7 @@ def main():
     print(f"✅ gold.ranking_acoes_realtime → {total_rank} ativos")
 
     fim = datetime.now()
-    print(f"\n=== JOB STREAMING TO GOLD CONCLUIDO ===")
+    print("\n=== JOB STREAMING TO GOLD CONCLUIDO ===")
     print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
 
