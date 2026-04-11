@@ -11,7 +11,7 @@ sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-da
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
 from pyspark.sql import functions as F
-from pyspark.sql.types import *
+from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType
 from datetime import datetime
 from src.config.settings import configure_adls
 
@@ -88,7 +88,7 @@ def main():
         .start(silver_streaming_path)
 
     query.awaitTermination()
-    print(f"✅ Streaming processado!")
+    print("✅ Streaming processado!")
 
     # Registrar no Unity Catalog
     spark.sql("DROP TABLE IF EXISTS case_santander.silver.streaming")
@@ -103,7 +103,7 @@ def main():
     print(f"✅ case_santander.silver.streaming → {total} registros")
 
     fim = datetime.now()
-    print(f"\n=== JOB STREAMING CONCLUIDO ===")
+    print("\n=== JOB STREAMING CONCLUIDO ===")
     print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
 

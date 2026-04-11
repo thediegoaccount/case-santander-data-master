@@ -11,7 +11,6 @@ sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-da
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
 from pyspark.sql import functions as F
-from pyspark.sql.window import Window
 from datetime import datetime
 
 
@@ -185,7 +184,7 @@ def main():
             print(f"  ❌ {tabela_sql} → {e}")
 
     fim = datetime.now()
-    print(f"\n=== JOB CORRETORA ANALISES CONCLUIDO ===")
+    print("\n=== JOB CORRETORA ANALISES CONCLUIDO ===")
     print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
 

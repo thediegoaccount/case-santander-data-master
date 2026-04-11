@@ -8,7 +8,6 @@ Tabelas geradas:
   - gold.ranking_acoes_realtime: ranking de ativos por volume no dia atual
 """
 from pyspark.sql import functions as F
-from pyspark.sql.window import Window
 from pyspark.sql import SparkSession
 from datetime import datetime
 
@@ -148,7 +147,7 @@ def detectar_anomalias_intraday(spark: SparkSession) -> int:
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.gold.anomalias_intraday")
 
-    total_anomalias = df_anomalias.filter(F.col("anomalia") == True).count()
+    total_anomalias = df_anomalias.filter(F.col("anomalia")).count()
     print(f"Gold anomalias_intraday gravado: {df_anomalias.count()} registros ({total_anomalias} anomalias)")
     return total_anomalias
 

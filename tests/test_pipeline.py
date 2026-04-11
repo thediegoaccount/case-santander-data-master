@@ -1,4 +1,3 @@
-import pytest
 import sys
 sys.path.append(".")
 from src.config.settings import ACOES, get_paths

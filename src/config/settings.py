@@ -1,5 +1,3 @@
-from datetime import datetime
-
 # Acoes monitoradas
 ACOES = [
     "PETR4.SA",   # Petrobras
