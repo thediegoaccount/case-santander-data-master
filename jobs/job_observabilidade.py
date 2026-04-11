@@ -51,7 +51,7 @@ def main():
             print(f"  ⚠️ {tabela}: {e}")
 
     fim = datetime.now()
-    print(f"\n=== JOB OBSERVABILIDADE CONCLUIDO ===")
+    print("\n=== JOB OBSERVABILIDADE CONCLUIDO ===")
     print(f"Tabelas monitoradas: {len(resultados)}")
     print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 

@@ -32,7 +32,7 @@ def main():
     total_wb    = extrair_world_bank(spark, storage_account)
 
     fim = datetime.now()
-    print(f"\n=== JOB EXTRACAO CONCLUIDO ===")
+    print("\n=== JOB EXTRACAO CONCLUIDO ===")
     print(f"Acoes:      {total_acoes} registros")
     print(f"BCB:        {total_bcb} registros")
     print(f"World Bank: {total_wb} registros")

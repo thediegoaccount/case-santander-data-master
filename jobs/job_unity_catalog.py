@@ -134,7 +134,7 @@ def main():
             print(f"  ⚠️ {tabela}: {e}")
 
     fim = datetime.now()
-    print(f"\n=== JOB UNITY CATALOG CONCLUIDO ===")
+    print("\n=== JOB UNITY CATALOG CONCLUIDO ===")
     print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
 

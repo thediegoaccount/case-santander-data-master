@@ -53,7 +53,7 @@ def main():
             print(f"  ❌ {tabela_sql} → {e}")
 
     fim = datetime.now()
-    print(f"\n=== JOB CARGA SQL CONCLUIDO ===")
+    print("\n=== JOB CARGA SQL CONCLUIDO ===")
     print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
 

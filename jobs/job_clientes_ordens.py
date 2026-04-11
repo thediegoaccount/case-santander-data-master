@@ -179,7 +179,7 @@ def main():
     print(f"✅ silver.ordens → {df_ordens_silver.count()} registros")
 
     fim = datetime.now()
-    print(f"\n=== JOB CLIENTES ORDENS CONCLUIDO ===")
+    print("\n=== JOB CLIENTES ORDENS CONCLUIDO ===")
     print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
 

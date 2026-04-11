@@ -42,6 +42,6 @@ def detectar_anomalias(spark: SparkSession, storage_account: str) -> int:
         .option("mergeSchema", "true") \
         .save(gold_path)
 
-    total = df_anomalias.filter(F.col("anomalia") == True).count()
+    total = df_anomalias.filter(F.col("anomalia")).count()
     print(f"Gold anomalias gravado: {df_anomalias.count()} registros ({total} anomalias)")
     return total
