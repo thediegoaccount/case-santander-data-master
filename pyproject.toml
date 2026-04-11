@@ -1,0 +1,23 @@
+[tool.black]
+line-length = 120
+target-version = ["py311"]
+exclude = '''
+/(
+    notebooks
+  | \.git
+  | __pycache__
+)/
+'''
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+exclude = ["notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E501"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
