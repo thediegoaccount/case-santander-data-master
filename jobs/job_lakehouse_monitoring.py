@@ -10,8 +10,9 @@ import sys
 
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
-from databricks.sdk import WorkspaceClient
 from datetime import datetime
+
+from databricks.sdk import WorkspaceClient
 
 
 def main():

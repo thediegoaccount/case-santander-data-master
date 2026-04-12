@@ -6,8 +6,9 @@ import sys
 
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
-from databricks.connect import DatabricksSession
 from datetime import datetime
+
+from databricks.connect import DatabricksSession
 
 from src.observability.monitoring import executar_monitoramento
 

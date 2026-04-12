@@ -10,16 +10,18 @@ import sys
 
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
+import hashlib
+import os
+import random
+import zipfile
+from datetime import datetime, timedelta
+
+import pandas as pd
+import requests
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
 from pyspark.sql import functions as F
-from datetime import datetime, timedelta
-import pandas as pd
-import requests
-import zipfile
-import hashlib
-import random
-import os
+
 from src.config.settings import configure_adls
 
 
