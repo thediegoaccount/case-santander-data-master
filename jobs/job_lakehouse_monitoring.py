@@ -5,11 +5,14 @@ Verifica e cria monitores de qualidade nas tabelas Delta.
 Ou via Databricks Workflow:
     Task: t8_lakehouse_monitoring
 """
+
 import sys
+
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
-from databricks.sdk import WorkspaceClient
 from datetime import datetime
+
+from databricks.sdk import WorkspaceClient
 
 
 def main():
@@ -39,7 +42,7 @@ def main():
                 full_name=tabela,
                 assets_dir=f"/Shared/monitoring/{tabela.replace('.', '/')}",
                 output_schema_name="case_santander.gold",
-                snapshot={}
+                snapshot={},
             )
             print(f"  ✅ Monitor criado: {tabela} → {monitor.status}")
         except Exception as e:

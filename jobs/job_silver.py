@@ -1,12 +1,15 @@
 """
 Job: Transformacao Silver
 """
+
 import sys
+
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
+
+from datetime import datetime
 
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
-from datetime import datetime
 
 from src.config.settings import configure_adls
 from src.transformation.silver_acoes import transformar_acoes
@@ -20,16 +23,16 @@ def main():
 
     spark = DatabricksSession.builder.getOrCreate()
 
-    client_id       = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
-    tenant_id       = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
-    client_secret   = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
+    client_id = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
+    tenant_id = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
+    client_secret = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
     storage_account = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
 
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
 
     total_acoes = transformar_acoes(spark, storage_account)
-    total_bcb   = transformar_bcb(spark, storage_account)
-    total_wb    = transformar_world_bank(spark, storage_account)
+    total_bcb = transformar_bcb(spark, storage_account)
+    total_wb = transformar_world_bank(spark, storage_account)
 
     fim = datetime.now()
     print("\n=== JOB SILVER CONCLUIDO ===")

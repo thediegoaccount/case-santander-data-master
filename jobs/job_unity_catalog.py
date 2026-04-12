@@ -1,12 +1,16 @@
 """
 Job: Unity Catalog — Bronze
 """
+
 import sys
+
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
+
+from datetime import datetime
 
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
-from datetime import datetime
+
 from src.config.settings import configure_adls
 
 
@@ -16,9 +20,9 @@ def main():
 
     spark = DatabricksSession.builder.getOrCreate()
 
-    client_id       = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
-    tenant_id       = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
-    client_secret   = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
+    client_id = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
+    tenant_id = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
+    client_secret = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
     storage_account = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
 
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
@@ -30,6 +34,7 @@ def main():
     print("✅ Schemas verificados!")
 
     # Tabelas Bronze em formato Parquet
+    # fmt: off
     tabelas_bronze_parquet = {
         "acoes":      f"abfss://bronze@{storage_account}.dfs.core.windows.net/acoes/",
         "bcb":        f"abfss://bronze@{storage_account}.dfs.core.windows.net/bcb/",
@@ -42,16 +47,19 @@ def main():
         "clientes": f"abfss://bronze@{storage_account}.dfs.core.windows.net/clientes/",
         "ordens":   f"abfss://bronze@{storage_account}.dfs.core.windows.net/ordens/",
     }
+    # fmt: on
 
     for tabela, path in tabelas_bronze_parquet.items():
         try:
             spark.sql(f"DROP TABLE IF EXISTS case_santander.bronze.{tabela}")
             df = spark.read.format("parquet").load(path)
+            # fmt: off
             df.write \
                 .format("delta") \
                 .mode("overwrite") \
                 .option("mergeSchema", "true") \
                 .saveAsTable(f"case_santander.bronze.{tabela}")
+            # fmt: on
             count = spark.sql(f"SELECT COUNT(*) as total FROM case_santander.bronze.{tabela}").collect()[0]["total"]
             print(f"  ✅ case_santander.bronze.{tabela} → {count} registros")
         except Exception as e:
@@ -61,32 +69,38 @@ def main():
         try:
             spark.sql(f"DROP TABLE IF EXISTS case_santander.bronze.{tabela}")
             df = spark.read.format("delta").load(path)
+            # fmt: off
             df.write \
                 .format("delta") \
                 .mode("overwrite") \
                 .option("mergeSchema", "true") \
                 .saveAsTable(f"case_santander.bronze.{tabela}")
+            # fmt: on
             count = spark.sql(f"SELECT COUNT(*) as total FROM case_santander.bronze.{tabela}").collect()[0]["total"]
             print(f"  ✅ case_santander.bronze.{tabela} → {count} registros")
         except Exception as e:
             print(f"  ⚠️ case_santander.bronze.{tabela} → {e}")
 
     # Tabelas Gold
+    # fmt: off
     tabelas_gold = {
         "performance_acoes": f"abfss://gold@{storage_account}.dfs.core.windows.net/performance_acoes/",
         "anomalias":         f"abfss://gold@{storage_account}.dfs.core.windows.net/anomalias/",
         "acoes_vs_cambio":   f"abfss://gold@{storage_account}.dfs.core.windows.net/acoes_vs_cambio/",
     }
+    # fmt: on
 
     for tabela, path in tabelas_gold.items():
         try:
             spark.sql(f"DROP TABLE IF EXISTS case_santander.gold.{tabela}")
             df = spark.read.format("delta").load(path)
+            # fmt: off
             df.write \
                 .format("delta") \
                 .mode("overwrite") \
                 .option("mergeSchema", "true") \
                 .saveAsTable(f"case_santander.gold.{tabela}")
+            # fmt: on
             count = spark.sql(f"SELECT COUNT(*) as total FROM case_santander.gold.{tabela}").collect()[0]["total"]
             print(f"  ✅ case_santander.gold.{tabela} → {count} registros")
         except Exception as e:
@@ -96,6 +110,7 @@ def main():
     # dinâmico — o Databricks decide o layout ideal dos arquivos por coluna,
     # sem necessidade de reescrever a tabela ao mudar a estratégia.
     print("\nAplicando Liquid Clustering...")
+    # fmt: off
     tabelas_liquid = {
         "case_santander.silver.acoes":              "ticker, ano, mes",
         "case_santander.silver.ordens":             "hash_cliente, ticker",
@@ -105,6 +120,7 @@ def main():
         "case_santander.gold.deteccao_fraude":      "score_fraude, data_processamento",
         "case_santander.gold.score_risco_clientes": "categoria_risco, hash_cliente",
     }
+    # fmt: on
 
     for tabela, cols in tabelas_liquid.items():
         try:
@@ -125,10 +141,12 @@ def main():
 
     for tabela in tabelas_cdf:
         try:
+            # fmt: off
             spark.sql(f"""
                 ALTER TABLE {tabela}
                 SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
             """)
+            # fmt: on
             print(f"  ✅ CDF habilitado: {tabela}")
         except Exception as e:
             print(f"  ⚠️ {tabela}: {e}")

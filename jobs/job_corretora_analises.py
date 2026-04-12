@@ -5,13 +5,16 @@ Calcula posicao de carteira, score de risco e deteccao de fraude.
 Ou via Databricks Workflow:
     Task: t7_corretora_analises
 """
+
 import sys
+
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
+
+from datetime import datetime
 
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
 from pyspark.sql import functions as F
-from datetime import datetime
 
 
 def main():
@@ -19,17 +22,20 @@ def main():
     print(f"=== JOB CORRETORA ANALISES INICIADO: {inicio} ===")
 
     spark = DatabricksSession.builder.getOrCreate()
-    sql_conn  = dbutils.secrets.get(scope="kv-case-santander", key="sql-connection-string")
+    sql_conn = dbutils.secrets.get(scope="kv-case-santander", key="sql-connection-string")
     data_hoje = datetime.now().strftime("%Y-%m-%d")
 
     # GOLD 1 — Posicao do cliente (carteira)
     print("Calculando posicao dos clientes...")
-    df_ordens   = spark.sql("SELECT * FROM case_santander.silver.ordens")
+    df_ordens = spark.sql("SELECT * FROM case_santander.silver.ordens")
+    # fmt: off
     df_clientes = spark.sql("""
-        SELECT hash_cliente, perfil_risco, faixa_saldo, score_credito 
+        SELECT hash_cliente, perfil_risco, faixa_saldo, score_credito
         FROM case_santander.silver.clientes
     """)
+    # fmt: on
 
+    # fmt: off
     df_posicao = df_ordens \
         .groupBy("hash_cliente", "ticker") \
         .agg(
@@ -112,7 +118,7 @@ def main():
 
     # GOLD 3 — Perfil clientes
     df_perfil = spark.sql("""
-        SELECT 
+        SELECT
             perfil_risco, faixa_etaria, score_categoria, pais,
             COUNT(*) as total_clientes,
             ROUND(AVG(saldo), 2) as saldo_medio,
@@ -182,6 +188,7 @@ def main():
             print(f"  ✅ {tabela_sql} → {df.count()} registros")
         except Exception as e:
             print(f"  ❌ {tabela_sql} → {e}")
+    # fmt: on
 
     fim = datetime.now()
     print("\n=== JOB CORRETORA ANALISES CONCLUIDO ===")

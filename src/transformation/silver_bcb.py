@@ -1,10 +1,11 @@
-from pyspark.sql import functions as F
-from pyspark.sql import SparkSession
 from datetime import datetime
+
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
 
 
 def transformar_bcb(spark: SparkSession, storage_account: str) -> int:
-    data_hoje   = datetime.now().strftime("%Y-%m-%d")
+    data_hoje = datetime.now().strftime("%Y-%m-%d")
     bronze_path = f"abfss://bronze@{storage_account}.dfs.core.windows.net/bcb/"
     silver_path = f"abfss://silver@{storage_account}.dfs.core.windows.net/bcb/"
 
@@ -16,6 +17,7 @@ def transformar_bcb(spark: SparkSession, storage_account: str) -> int:
     print("Amostra:")
     df.show(3)
 
+    # fmt: off
     df_silver = df \
         .withColumn("data",      F.to_date("data", "dd/MM/yyyy")) \
         .withColumn("ano",       F.year("data")) \
@@ -27,15 +29,18 @@ def transformar_bcb(spark: SparkSession, storage_account: str) -> int:
         .filter(F.col("data").isNotNull()) \
         .dropDuplicates(["data", "indicador"]) \
         .drop("extracao")
+    # fmt: on
 
     print(f"Registros após transformação: {df_silver.count()}")
     df_silver.show(3)
 
+    # fmt: off
     df_silver.write \
         .format("delta") \
         .mode("overwrite") \
         .option("mergeSchema", "true") \
         .save(silver_path)
+    # fmt: on
 
     total = df_silver.count()
     print(f"Silver BCB gravado: {total} registros")

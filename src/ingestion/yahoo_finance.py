@@ -1,6 +1,8 @@
-import yfinance as yf
-import pandas as pd
 from datetime import datetime
+
+import pandas as pd
+import yfinance as yf
+
 from src.config.settings import ACOES
 
 
@@ -8,7 +10,7 @@ def extrair_acoes(spark, storage_account: str, acoes: list = ACOES) -> int:
     """
     Extrai dados historicos de acoes da B3 via Yahoo Finance
     e grava na camada Bronze do ADLS.
-    
+
     Returns: total de registros gravados
     """
     data_hoje = datetime.now().strftime("%Y-%m-%d")
@@ -20,7 +22,7 @@ def extrair_acoes(spark, storage_account: str, acoes: list = ACOES) -> int:
         try:
             ticker = yf.Ticker(acao)
             df = ticker.history(period="2y")
-            df["ticker"]        = acao
+            df["ticker"] = acao
             df["data_extracao"] = data_hoje
             df_total = pd.concat([df_total, df])
             print(f"  OK: {acao} — {len(df)} registros")
