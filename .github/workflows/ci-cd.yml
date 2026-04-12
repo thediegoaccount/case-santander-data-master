@@ -34,7 +34,7 @@ concurrency:
 
 env:
   PYTHON_VERSION: "3.11"
-  DATABRICKS_CLI_VERSION: "0.218.0"
+  DATABRICKS_CLI_VERSION: "0.18.0"
 
 # ─────────────────────────────────────────────────────────────────────────────
 jobs:
