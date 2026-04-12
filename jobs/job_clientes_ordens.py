@@ -5,7 +5,9 @@ Ingere dados de clientes via Kaggle e gera ordens simuladas.
 Ou via Databricks Workflow:
     Task: t6_clientes_ordens
 """
+
 import sys
+
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
 from databricks.connect import DatabricksSession
@@ -52,19 +54,19 @@ def main():
 
     spark = DatabricksSession.builder.getOrCreate()
 
-    client_id       = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
-    tenant_id       = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
-    client_secret   = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
+    client_id = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
+    tenant_id = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
+    client_secret = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
     storage_account = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
     kaggle_username = dbutils.secrets.get(scope="kv-case-santander", key="kaggle-username")
-    kaggle_key      = dbutils.secrets.get(scope="kv-case-santander", key="kaggle-key")
+    kaggle_key = dbutils.secrets.get(scope="kv-case-santander", key="kaggle-key")
 
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
 
     data_hoje = datetime.now().strftime("%Y-%m-%d")
 
     # Download Kaggle
-    pid      = os.getpid()
+    pid = os.getpid()
     work_dir = f"/tmp/kaggle_{pid}"
     zip_path = f"{work_dir}/churn.zip"
     os.makedirs(work_dir, exist_ok=True)
@@ -85,6 +87,7 @@ def main():
     df_raw = pd.read_csv(csv_path)
 
     df_clientes = df_raw.copy()
+    # fmt: off
     df_clientes["id_cliente"]       = df_clientes["CustomerId"].apply(lambda x: f"CLI{x}")
     df_clientes["hash_cliente"]     = df_clientes["CustomerId"].apply(hash_id)
     df_clientes["sobrenome_masked"] = df_clientes["Surname"].apply(mascarar_sobrenome)
@@ -93,6 +96,7 @@ def main():
     df_clientes["ativo"]            = df_clientes["IsActiveMember"].apply(lambda x: x == 1)
     df_clientes["churn"]            = df_clientes["Exited"].apply(lambda x: x == 1)
     df_clientes["data_extracao"]    = data_hoje
+    # fmt: on
 
     df_clientes_final = df_clientes[[
         "id_cliente", "hash_cliente", "sobrenome_masked",
@@ -108,6 +112,7 @@ def main():
 
     # Gravar clientes no Bronze
     df_clientes_spark = spark.createDataFrame(df_clientes_final)
+    # fmt: off
     df_clientes_spark.write.format("delta").mode("overwrite") \
         .saveAsTable("case_santander.bronze.clientes")
     print(f"✅ bronze.clientes → {df_clientes_spark.count()} registros")
@@ -122,9 +127,9 @@ def main():
     for cliente in clientes_amostra:
         num_ordens = random.randint(1, 10)
         for _ in range(num_ordens):
-            acao     = random.choice(acoes)
-            preco    = round(random.uniform(10, 100), 2)
-            qtd      = random.randint(100, 10000)
+            acao = random.choice(acoes)
+            preco = round(random.uniform(10, 100), 2)
+            qtd = random.randint(100, 10000)
             data_ord = datetime(2024, 1, 1) + timedelta(days=random.randint(0, 457))
 
             ordens.append({
@@ -176,6 +181,7 @@ def main():
     df_ordens_silver.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.silver.ordens")
+    # fmt: on
     print(f"✅ silver.ordens → {df_ordens_silver.count()} registros")
 
     fim = datetime.now()

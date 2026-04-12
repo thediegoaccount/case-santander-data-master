@@ -36,9 +36,9 @@ def main():
 
     spark = DatabricksSession.builder.getOrCreate()
 
-    client_id       = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
-    tenant_id       = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
-    client_secret   = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
+    client_id = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
+    tenant_id = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
+    client_secret = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
     storage_account = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
 
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
@@ -54,6 +54,7 @@ def main():
             WHERE tabela = 'streaming'
         """).collect()[0][0]
 
+        # fmt: off
         df_cdf = spark.read \
             .format("delta") \
             .option("readChangeFeed", "true") \
@@ -61,6 +62,7 @@ def main():
             .table("case_santander.silver.streaming") \
             .filter("_change_type = 'insert'") \
             .drop("_change_type", "_commit_version", "_commit_timestamp")
+        # fmt: on
 
         total_streaming = df_cdf.count()
         print(f"CDC ativo: {total_streaming} novas transacoes desde versao {ultima_versao}")

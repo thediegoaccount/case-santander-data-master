@@ -1,7 +1,9 @@
 """
 Job: SCD Type 2
 """
+
 import sys
+
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
 from databricks.connect import DatabricksSession
@@ -17,7 +19,7 @@ def main():
     spark = DatabricksSession.builder.getOrCreate()
 
     total_clientes = aplicar_scd_clientes(spark)
-    total_score    = aplicar_scd_score_risco(spark)
+    total_score = aplicar_scd_score_risco(spark)
 
     fim = datetime.now()
     print("\n=== JOB SCD CONCLUIDO ===")

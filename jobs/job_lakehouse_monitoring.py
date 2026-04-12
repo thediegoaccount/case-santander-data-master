@@ -5,7 +5,9 @@ Verifica e cria monitores de qualidade nas tabelas Delta.
 Ou via Databricks Workflow:
     Task: t8_lakehouse_monitoring
 """
+
 import sys
+
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
 from databricks.sdk import WorkspaceClient

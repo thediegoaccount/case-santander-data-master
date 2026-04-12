@@ -4,9 +4,9 @@ from datetime import datetime
 
 
 def extrair_bcb(spark, storage_account: str) -> int:
-    data_hoje    = datetime.now().strftime("%Y-%m-%d")
+    data_hoje = datetime.now().strftime("%Y-%m-%d")
     data_inicial = "01/04/2021"
-    data_final   = "01/04/2026"
+    data_final = "01/04/2026"
 
     def buscar_diario(codigo, nome):
         url = (f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados"
@@ -14,9 +14,9 @@ def extrair_bcb(spark, storage_account: str) -> int:
         try:
             response = requests.get(url, timeout=10)
             df = pd.DataFrame(response.json())
-            df["indicador"]     = nome
+            df["indicador"] = nome
             df["data_extracao"] = data_hoje
-            df["valor"]         = pd.to_numeric(df["valor"], errors="coerce")
+            df["valor"] = pd.to_numeric(df["valor"], errors="coerce")
             print(f"  OK: {nome} — {len(df)} registros")
             return df
         except Exception as e:
@@ -28,9 +28,9 @@ def extrair_bcb(spark, storage_account: str) -> int:
         try:
             response = requests.get(url, timeout=10)
             df = pd.DataFrame(response.json())
-            df["indicador"]     = nome
+            df["indicador"] = nome
             df["data_extracao"] = data_hoje
-            df["valor"]         = pd.to_numeric(df["valor"], errors="coerce")
+            df["valor"] = pd.to_numeric(df["valor"], errors="coerce")
             print(f"  OK: {nome} — {len(df)} registros")
             return df
         except Exception as e:
@@ -38,10 +38,10 @@ def extrair_bcb(spark, storage_account: str) -> int:
             return pd.DataFrame()
 
     print("Extraindo BCB...")
-    df_selic  = buscar_diario(11,  "selic")
+    df_selic = buscar_diario(11,  "selic")
     df_cambio = buscar_diario(1,   "cambio_usd_brl")
-    df_ipca   = buscar_mensal(433, "ipca")
-    df_bcb    = pd.concat([df_selic, df_cambio, df_ipca], ignore_index=True)
+    df_ipca = buscar_mensal(433, "ipca")
+    df_bcb = pd.concat([df_selic, df_cambio, df_ipca], ignore_index=True)
 
     # Usando extracao= em vez de data= para evitar conflito com coluna data
     bronze_path = f"abfss://bronze@{storage_account}.dfs.core.windows.net/bcb/extracao={data_hoje}/"

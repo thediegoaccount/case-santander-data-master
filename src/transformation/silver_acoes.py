@@ -22,6 +22,7 @@ def transformar_acoes(spark: SparkSession, storage_account: str) -> int:
 
     df = spark.read.parquet(bronze_path)
 
+    # fmt: off
     df_silver = df \
         .withColumn("date", F.to_date("date")) \
         .withColumn("ano",       F.year("date")) \
@@ -64,6 +65,7 @@ def transformar_acoes(spark: SparkSession, storage_account: str) -> int:
         .option("mergeSchema", "true") \
         .partitionBy("ano", "mes") \
         .save(silver_path)
+    # fmt: on
 
     total = df_silver.count()
     print(f"Silver acoes gravado: {total} registros")

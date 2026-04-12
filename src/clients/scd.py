@@ -14,15 +14,18 @@ def aplicar_scd_type2(spark: SparkSession, df_novos,
     from delta.tables import DeltaTable
     data_hoje = datetime.now().strftime("%Y-%m-%d")
 
+    # fmt: off
     df_com_scd = df_novos \
         .withColumn("data_inicio", F.lit(data_hoje)) \
         .withColumn("data_fim",    F.lit("9999-12-31")) \
         .withColumn("atual",       F.lit(True))
+    # fmt: on
 
     try:
         delta_table = DeltaTable.forName(spark, tabela_uc)
 
         # Fecha registros antigos
+        # fmt: off
         delta_table.alias("antigo") \
             .merge(
                 df_novos.alias("novo"),
@@ -40,17 +43,20 @@ def aplicar_scd_type2(spark: SparkSession, df_novos,
             .mode("append") \
             .option("mergeSchema", "true") \
             .saveAsTable(tabela_uc)
+        # fmt: on
 
         print(f"SCD Type 2 atualizado: {tabela_uc}")
 
     except Exception as e:
         if "is not a Delta table" in str(e) or "Table or view not found" in str(e):
             # Primeira carga
+            # fmt: off
             df_com_scd.write \
                 .format("delta") \
                 .mode("overwrite") \
                 .option("mergeSchema", "true") \
                 .saveAsTable(tabela_uc)
+            # fmt: on
             print(f"SCD Type 2 primeira carga: {tabela_uc}")
         else:
             raise e

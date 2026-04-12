@@ -5,7 +5,9 @@ Processa transacoes financeiras em tempo real via Structured Streaming.
 Ou via Databricks Workflow:
     Task: t5_streaming
 """
+
 import sys
+
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
 from databricks.connect import DatabricksSession
@@ -22,22 +24,23 @@ def main():
 
     spark = DatabricksSession.builder.getOrCreate()
 
-    client_id       = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
-    tenant_id       = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
-    client_secret   = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
+    client_id = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
+    tenant_id = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
+    client_secret = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
     storage_account = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
 
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
 
-    bronze_kafka_path  = f"abfss://bronze@{storage_account}.dfs.core.windows.net/kafka/"
+    bronze_kafka_path = f"abfss://bronze@{storage_account}.dfs.core.windows.net/kafka/"
     silver_streaming_path = f"abfss://silver@{storage_account}.dfs.core.windows.net/streaming/"
-    checkpoint_path    = f"abfss://silver@{storage_account}.dfs.core.windows.net/checkpoints/streaming/"
+    checkpoint_path = f"abfss://silver@{storage_account}.dfs.core.windows.net/checkpoints/streaming/"
 
     # Parar todos os streams ativos antes de iniciar
     for stream in spark.streams.active:
         stream.stop()
         print(f"Stream anterior parado: {stream.name}")
-        
+
+    # fmt: off
     schema_transacao = StructType([
         StructField("timestamp",    StringType(),  True),
         StructField("ticker",       StringType(),  True),
@@ -47,12 +50,14 @@ def main():
         StructField("corretora",    StringType(),  True),
         StructField("id_transacao", StringType(),  True)
     ])
+    # fmt: on
 
     # Limpar checkpoint anterior
     dbutils.fs.rm(checkpoint_path, recurse=True)
 
     # Auto Loader: ingestion incremental cloud-native com rastreamento de arquivos
     # e inferência/evolução de schema automática via cloudFiles
+    # fmt: off
     df_stream = spark.readStream \
         .format("cloudFiles") \
         .option("cloudFiles.format", "parquet") \
@@ -98,6 +103,7 @@ def main():
         .mode("overwrite") \
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.silver.streaming")
+    # fmt: on
 
     total = spark.sql("SELECT COUNT(*) as total FROM case_santander.silver.streaming").collect()[0]["total"]
     print(f"✅ case_santander.silver.streaming → {total} registros")

@@ -1,7 +1,9 @@
 """
 Job: Analises Gold
 """
+
 import sys
+
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
 from databricks.connect import DatabricksSession
@@ -20,16 +22,16 @@ def main():
 
     spark = DatabricksSession.builder.getOrCreate()
 
-    client_id       = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
-    tenant_id       = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
-    client_secret   = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
+    client_id = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
+    tenant_id = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
+    client_secret = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
     storage_account = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
 
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
 
-    total_anomalias   = detectar_anomalias(spark, storage_account)
+    total_anomalias = detectar_anomalias(spark, storage_account)
     total_performance = calcular_performance(spark, storage_account)
-    total_fraudes     = detectar_fraude(spark)
+    total_fraudes = detectar_fraude(spark)
 
     fim = datetime.now()
     print("\n=== JOB GOLD CONCLUIDO ===")

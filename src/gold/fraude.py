@@ -17,14 +17,15 @@ def detectar_fraude(spark: SparkSession) -> int:
     print("Detectando fraudes...")
 
     df_ordens = spark.sql("SELECT * FROM case_santander.silver.ordens")
-    df_score  = spark.sql("""
-        SELECT hash_cliente, score_risco, 
-               categoria_risco, limite_operacional 
+    df_score = spark.sql("""
+        SELECT hash_cliente, score_risco,
+               categoria_risco, limite_operacional
         FROM case_santander.gold.score_risco_clientes
     """)
 
     # df_score tem ~7.900 linhas com apenas 4 colunas — cabe em broadcast
     # evitando shuffle de df_ordens (5.341 linhas) em sort-merge join
+    # fmt: off
     df_fraude = df_ordens \
         .join(F.broadcast(df_score), on="hash_cliente", how="left") \
         .withColumn("alerta_valor_alto",
@@ -59,6 +60,7 @@ def detectar_fraude(spark: SparkSession) -> int:
         .mode("overwrite") \
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.gold.deteccao_fraude")
+    # fmt: on
 
     total_critico = df_fraude.filter(F.col("score_fraude") == "Critico").count()
     print(f"Gold fraude gravado: {df_fraude.count()} registros ({total_critico} criticos)")

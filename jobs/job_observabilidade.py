@@ -1,7 +1,9 @@
 """
 Job: Observabilidade
 """
+
 import sys
+
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
 from databricks.connect import DatabricksSession
@@ -22,13 +24,16 @@ def main():
         spark.sql("DROP TABLE IF EXISTS case_santander.gold.observabilidade")
 
         df_metricas = spark.createDataFrame(resultados)
+        # fmt: off
         df_metricas.write \
             .format("delta") \
             .saveAsTable("case_santander.gold.observabilidade")
+        # fmt: on
 
     # Manutenção Delta: OPTIMIZE compacta small files e VACUUM remove
     # versões antigas além da janela de retenção (168h = 7 dias)
     print("\nExecutando manutenção Delta (OPTIMIZE + VACUUM)...")
+    # fmt: off
     tabelas_manutencao = [
         ("case_santander.silver.acoes",              "ticker, ano, mes"),
         ("case_santander.silver.ordens",             "hash_cliente, ticker"),
@@ -41,6 +46,7 @@ def main():
         ("case_santander.gold.posicao_clientes",     "ticker"),
         ("case_santander.gold.score_risco_clientes", "categoria_risco"),
     ]
+    # fmt: on
 
     for tabela, cols_zorder in tabelas_manutencao:
         try:

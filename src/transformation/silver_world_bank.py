@@ -4,7 +4,7 @@ from datetime import datetime
 
 
 def transformar_world_bank(spark: SparkSession, storage_account: str) -> int:
-    data_hoje   = datetime.now().strftime("%Y-%m-%d")
+    data_hoje = datetime.now().strftime("%Y-%m-%d")
     bronze_path = f"abfss://bronze@{storage_account}.dfs.core.windows.net/world_bank/"
     silver_path = f"abfss://silver@{storage_account}.dfs.core.windows.net/world_bank/"
 
@@ -21,6 +21,7 @@ def transformar_world_bank(spark: SparkSession, storage_account: str) -> int:
     else:
         raise Exception("Coluna de ano não encontrada no Bronze!")
 
+    # fmt: off
     df_silver = df \
         .withColumn("valor", F.round("valor", 4)) \
         .withColumn("data_processamento", F.lit(data_hoje)) \
@@ -32,6 +33,7 @@ def transformar_world_bank(spark: SparkSession, storage_account: str) -> int:
         .mode("overwrite") \
         .option("mergeSchema", "true") \
         .save(silver_path)
+    # fmt: on
 
     total = df_silver.count()
     print(f"Silver World Bank gravado: {total} registros")

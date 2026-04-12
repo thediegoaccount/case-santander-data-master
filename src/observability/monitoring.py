@@ -21,10 +21,10 @@ def monitorar_tabela(spark: SparkSession, tabela_uc: str) -> dict:
     inicio = datetime.now()
     partes = tabela_uc.split(".")
     camada = partes[1]
-    nome   = partes[2]
+    nome = partes[2]
 
     try:
-        df    = spark.sql(f"SELECT * FROM {tabela_uc}")
+        df = spark.sql(f"SELECT * FROM {tabela_uc}")
         total = df.count()
 
         if total == 0:
@@ -37,8 +37,9 @@ def monitorar_tabela(spark: SparkSession, tabela_uc: str) -> dict:
         ]).first().asDict().values())
 
         duplicatas = total - df.dropDuplicates().count()
-        qualidade  = round((1 - nulos / (total * len(df.columns))) * 100, 2)
+        qualidade = round((1 - nulos / (total * len(df.columns))) * 100, 2)
 
+        # fmt: off
         metricas = {
             "camada":           camada,
             "tabela":           nome,
@@ -49,6 +50,7 @@ def monitorar_tabela(spark: SparkSession, tabela_uc: str) -> dict:
             "qualidade_pct":    qualidade,
             "tempo_seg":        round((datetime.now() - inicio).total_seconds(), 2)
         }
+        # fmt: on
 
         logger.info(
             f"[{camada}][{nome}] Registros: {total} | "
