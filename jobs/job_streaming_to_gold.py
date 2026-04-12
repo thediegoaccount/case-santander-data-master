@@ -74,7 +74,8 @@ def main():
     except Exception:
         # Fallback: leitura completa se CDF ainda nao estiver habilitado
         df_cdf = None
-        total_streaming = spark.sql("SELECT COUNT(*) as total FROM case_santander.silver.streaming").collect()[0]["total"]
+        _row = spark.sql("SELECT COUNT(*) as total FROM case_santander.silver.streaming").collect()[0]
+        total_streaming = _row["total"]
         print(f"CDC indisponivel — leitura completa: {total_streaming} transacoes")
 
     if total_streaming == 0:
