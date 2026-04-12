@@ -215,9 +215,7 @@ jobs:
     name: "Build Docker"
     runs-on: ubuntu-latest
     needs: [test, security]
-    if: |
-      github.event_name != 'pull_request' &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    if: github.event_name != 'pull_request'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -354,7 +352,7 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           for dir in src/config src/ingestion src/transformation src/gold \
-                     src/observability jobs; do
+                     src/clients src/streaming src/observability jobs; do
             databricks workspace mkdirs "$DEPLOY_PATH/$dir"
           done
 
@@ -423,7 +421,7 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           for dir in src/config src/ingestion src/transformation src/gold \
-                     src/observability jobs; do
+                     src/clients src/streaming src/observability jobs; do
             databricks workspace mkdirs "$DEPLOY_PATH/$dir"
           done
 
