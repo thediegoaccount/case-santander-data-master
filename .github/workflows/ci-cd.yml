@@ -354,7 +354,7 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           for dir in src/config src/ingestion src/transformation src/gold \
-                     src/observability jobs; do
+                     src/clients src/streaming src/observability jobs; do
             databricks workspace mkdirs "$DEPLOY_PATH/$dir"
           done
 
@@ -423,7 +423,7 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           for dir in src/config src/ingestion src/transformation src/gold \
-                     src/observability jobs; do
+                     src/clients src/streaming src/observability jobs; do
             databricks workspace mkdirs "$DEPLOY_PATH/$dir"
           done
 
