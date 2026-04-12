@@ -1,6 +1,7 @@
-import requests
-import pandas as pd
 from datetime import datetime
+
+import pandas as pd
+import requests
 
 
 def extrair_world_bank(spark, storage_account: str) -> int:
@@ -15,17 +16,14 @@ def extrair_world_bank(spark, storage_account: str) -> int:
                 print(f"  VAZIO: {nome}")
                 return pd.DataFrame()
             registros = data[1]
-            df = pd.DataFrame([{
-                "ano":   r["date"],
-                "valor": r["value"]
-            } for r in registros if r["value"] is not None])
+            df = pd.DataFrame([{"ano": r["date"], "valor": r["value"]} for r in registros if r["value"] is not None])
             if df.empty:
                 print(f"  VAZIO: {nome}")
                 return pd.DataFrame()
-            df["indicador"]     = nome
+            df["indicador"] = nome
             df["data_extracao"] = data_hoje
-            df["fonte"]         = "world_bank"
-            df["valor"]         = pd.to_numeric(df["valor"], errors="coerce")
+            df["fonte"] = "world_bank"
+            df["valor"] = pd.to_numeric(df["valor"], errors="coerce")
             print(f"  OK: {nome} — {len(df)} registros")
             return df
         except Exception as e:
@@ -33,11 +31,11 @@ def extrair_world_bank(spark, storage_account: str) -> int:
             return pd.DataFrame()
 
     print("Extraindo World Bank...")
-    df_pib        = buscar("NY.GDP.MKTP.KD.ZG", "pib_anual")
-    df_desemprego = buscar("SL.UEM.TOTL.ZS",    "desemprego")
-    
+    df_pib = buscar("NY.GDP.MKTP.KD.ZG", "pib_anual")
+    df_desemprego = buscar("SL.UEM.TOTL.ZS", "desemprego")
+
     dfs = [df for df in [df_pib, df_desemprego] if not df.empty]
-    
+
     if not dfs:
         print("⚠️ World Bank sem dados disponíveis — pulando extração")
         return 0

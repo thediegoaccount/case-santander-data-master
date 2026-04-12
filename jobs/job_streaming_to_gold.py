@@ -15,18 +15,22 @@ Tabelas geradas:
 Ou via Databricks Workflow:
     Task: t10_streaming_gold
 """
+
 import sys
+
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
+
+from datetime import datetime
 
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
-from datetime import datetime
+
 from src.config.settings import configure_adls
 from src.gold.streaming_gold import (
-    detectar_fraude_streaming,
-    detectar_anomalias_intraday,
-    calcular_volume_intraday,
     calcular_ranking_realtime,
+    calcular_volume_intraday,
+    detectar_anomalias_intraday,
+    detectar_fraude_streaming,
 )
 
 
@@ -36,9 +40,9 @@ def main():
 
     spark = DatabricksSession.builder.getOrCreate()
 
-    client_id       = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
-    tenant_id       = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
-    client_secret   = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
+    client_id = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
+    tenant_id = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
+    client_secret = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
     storage_account = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
 
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
@@ -48,12 +52,15 @@ def main():
     # _change_type filtra somente inserções novas (insert), ignorando
     # updates/deletes que não se aplicam ao fluxo de streaming.
     try:
+        # fmt: off
         ultima_versao = spark.sql("""
             SELECT COALESCE(MAX(versao_cdf), 0)
             FROM case_santander.gold.observabilidade
             WHERE tabela = 'streaming'
         """).collect()[0][0]
+        # fmt: on
 
+        # fmt: off
         df_cdf = spark.read \
             .format("delta") \
             .option("readChangeFeed", "true") \
@@ -61,6 +68,7 @@ def main():
             .table("case_santander.silver.streaming") \
             .filter("_change_type = 'insert'") \
             .drop("_change_type", "_commit_version", "_commit_timestamp")
+        # fmt: on
 
         total_streaming = df_cdf.count()
         print(f"CDC ativo: {total_streaming} novas transacoes desde versao {ultima_versao}")
@@ -68,9 +76,8 @@ def main():
     except Exception:
         # Fallback: leitura completa se CDF ainda nao estiver habilitado
         df_cdf = None
-        total_streaming = spark.sql(
-            "SELECT COUNT(*) as total FROM case_santander.silver.streaming"
-        ).collect()[0]["total"]
+        _row = spark.sql("SELECT COUNT(*) as total FROM case_santander.silver.streaming").collect()[0]
+        total_streaming = _row["total"]
         print(f"CDC indisponivel — leitura completa: {total_streaming} transacoes")
 
     if total_streaming == 0:

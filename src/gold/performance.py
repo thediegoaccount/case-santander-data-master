@@ -1,9 +1,11 @@
 """
 Calculo de performance das acoes por setor e ano
 """
-from pyspark.sql import functions as F
-from pyspark.sql import SparkSession
+
 from datetime import datetime
+
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
 
 
 def calcular_performance(spark: SparkSession, storage_account: str) -> int:
@@ -13,14 +15,15 @@ def calcular_performance(spark: SparkSession, storage_account: str) -> int:
 
     Returns: total de registros gravados
     """
-    data_hoje   = datetime.now().strftime("%Y-%m-%d")
+    data_hoje = datetime.now().strftime("%Y-%m-%d")
     silver_path = f"abfss://silver@{storage_account}.dfs.core.windows.net/acoes/"
-    gold_path   = f"abfss://gold@{storage_account}.dfs.core.windows.net/performance_acoes/"
+    gold_path = f"abfss://gold@{storage_account}.dfs.core.windows.net/performance_acoes/"
 
     print("Calculando performance...")
 
     df = spark.read.format("delta").load(silver_path)
 
+    # fmt: off
     df_performance = df \
         .groupBy("ticker", "empresa", "setor", "ano") \
         .agg(
@@ -40,6 +43,7 @@ def calcular_performance(spark: SparkSession, storage_account: str) -> int:
         .format("delta") \
         .mode("overwrite") \
         .save(gold_path)
+    # fmt: on
 
     total = df_performance.count()
     print(f"Gold performance gravado: {total} registros")

@@ -5,12 +5,15 @@ Carrega tabelas Gold no Azure SQL Database.
 Ou via Databricks Workflow:
     Task: t_carga_sql
 """
+
 import sys
+
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
+
+from datetime import datetime
 
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
-from datetime import datetime
 
 
 def main():
@@ -41,6 +44,7 @@ def main():
         tabela_sql = f"dbo.{tabela_uc.split('.')[-1]}"
         try:
             df = spark.sql(f"SELECT * FROM {tabela_uc}")
+            # fmt: off
             df.write \
                 .format("jdbc") \
                 .option("url", sql_conn) \
@@ -48,6 +52,7 @@ def main():
                 .option("driver", "com.microsoft.sqlserver.jdbc.SQLServerDriver") \
                 .mode("overwrite") \
                 .save()
+            # fmt: on
             print(f"  ✅ {tabela_sql} → {df.count()} registros")
         except Exception as e:
             print(f"  ❌ {tabela_sql} → {e}")

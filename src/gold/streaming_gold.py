@@ -7,9 +7,11 @@ Tabelas geradas:
   - gold.volume_intraday       : volume negociado por ticker e hora do dia
   - gold.ranking_acoes_realtime: ranking de ativos por volume no dia atual
 """
-from pyspark.sql import functions as F
-from pyspark.sql import SparkSession
+
 from datetime import datetime
+
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
 
 
 def detectar_fraude_streaming(spark: SparkSession) -> int:
@@ -34,14 +36,17 @@ def detectar_fraude_streaming(spark: SparkSession) -> int:
     df_stream = spark.sql("SELECT * FROM case_santander.silver.streaming")
 
     # Usa o ano mais recente de performance como referencia de preco historico
+    # fmt: off
     df_perf = spark.sql("""
         SELECT ticker, preco_medio, volatilidade
         FROM case_santander.gold.performance_acoes
         WHERE ano = (SELECT MAX(ano) FROM case_santander.gold.performance_acoes)
     """)
+    # fmt: on
 
     # df_perf tem exatamente 9 linhas (9 tickers × 1 ano) — broadcast elimina
     # o sort-merge shuffle distribuindo a tabela inteira em cada executor
+    # fmt: off
     df_fraude = df_stream \
         .join(F.broadcast(df_perf), on="ticker", how="left") \
         .withColumn("alerta_volume_suspeito",
@@ -85,6 +90,7 @@ def detectar_fraude_streaming(spark: SparkSession) -> int:
         .mode("overwrite") \
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.gold.fraude_streaming")
+    # fmt: on
 
     total_critico = df_fraude.filter(F.col("score_fraude") == "Critico").count()
     print(f"Gold fraude_streaming gravado: {df_fraude.count()} registros ({total_critico} criticos)")
@@ -106,6 +112,7 @@ def detectar_anomalias_intraday(spark: SparkSession) -> int:
 
     df_stream = spark.sql("SELECT * FROM case_santander.silver.streaming")
 
+    # fmt: off
     df_hora = df_stream \
         .groupBy("ticker", "hora") \
         .agg(
@@ -114,15 +121,19 @@ def detectar_anomalias_intraday(spark: SparkSession) -> int:
             F.sum("quantidade").alias("volume_hora"),
             F.count("*").alias("total_transacoes_hora")
         )
+    # fmt: on
 
+    # fmt: off
     df_perf = spark.sql("""
         SELECT ticker, preco_medio, volatilidade
         FROM case_santander.gold.performance_acoes
         WHERE ano = (SELECT MAX(ano) FROM case_santander.gold.performance_acoes)
     """)
+    # fmt: on
 
     # desvio_historico em R$: volatilidade (% stddev de variacao) * preco_medio / 100
     # df_hora tem no maximo 9 tickers × 24h = 216 linhas; df_perf = 9 linhas
+    # fmt: off
     df_anomalias = df_hora \
         .join(F.broadcast(df_perf), on="ticker", how="left") \
         .withColumn("desvio_historico_rs",
@@ -146,6 +157,7 @@ def detectar_anomalias_intraday(spark: SparkSession) -> int:
         .mode("overwrite") \
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.gold.anomalias_intraday")
+    # fmt: on
 
     total_anomalias = df_anomalias.filter(F.col("anomalia")).count()
     print(f"Gold anomalias_intraday gravado: {df_anomalias.count()} registros ({total_anomalias} anomalias)")
@@ -170,6 +182,7 @@ def calcular_volume_intraday(spark: SparkSession) -> int:
 
     df_stream = spark.sql("SELECT * FROM case_santander.silver.streaming")
 
+    # fmt: off
     df_vol = df_stream \
         .groupBy("ticker", "hora") \
         .agg(
@@ -182,13 +195,17 @@ def calcular_volume_intraday(spark: SparkSession) -> int:
             F.sum(F.when(F.col("tipo") == "venda", F.col("quantidade"))
                 .otherwise(0)).alias("volume_vendas")
         )
+    # fmt: on
 
+    # fmt: off
     df_perf = spark.sql("""
         SELECT ticker, volume_medio
         FROM case_santander.gold.performance_acoes
         WHERE ano = (SELECT MAX(ano) FROM case_santander.gold.performance_acoes)
     """)
+    # fmt: on
 
+    # fmt: off
     df_volume_intraday = df_vol \
         .join(F.broadcast(df_perf), on="ticker", how="left") \
         .withColumn("pct_volume_diario",
@@ -213,6 +230,7 @@ def calcular_volume_intraday(spark: SparkSession) -> int:
         .mode("overwrite") \
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.gold.volume_intraday")
+    # fmt: on
 
     total = df_volume_intraday.count()
     print(f"Gold volume_intraday gravado: {total} registros")
@@ -236,6 +254,7 @@ def calcular_ranking_realtime(spark: SparkSession) -> int:
 
     df_stream = spark.sql("SELECT * FROM case_santander.silver.streaming")
 
+    # fmt: off
     df_rank = df_stream \
         .groupBy("ticker") \
         .agg(
@@ -248,13 +267,17 @@ def calcular_ranking_realtime(spark: SparkSession) -> int:
             F.round(F.min("preco"), 2).alias("preco_minimo"),
             F.round(F.max("preco"), 2).alias("preco_maximo")
         )
+    # fmt: on
 
+    # fmt: off
     df_perf = spark.sql("""
         SELECT ticker, empresa, setor, preco_medio as preco_medio_historico
         FROM case_santander.gold.performance_acoes
         WHERE ano = (SELECT MAX(ano) FROM case_santander.gold.performance_acoes)
     """)
+    # fmt: on
 
+    # fmt: off
     df_ranking = df_rank \
         .join(F.broadcast(df_perf), on="ticker", how="left") \
         .withColumn("variacao_vs_historico_pct",
@@ -276,6 +299,7 @@ def calcular_ranking_realtime(spark: SparkSession) -> int:
         .mode("overwrite") \
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.gold.ranking_acoes_realtime")
+    # fmt: on
 
     total = df_ranking.count()
     print(f"Gold ranking_acoes_realtime gravado: {total} registros")

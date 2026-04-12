@@ -1,15 +1,14 @@
 """
 Monitoramento de qualidade dos dados por camada
 """
-from pyspark.sql import functions as F
-from pyspark.sql import SparkSession
-from datetime import datetime
-import logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s — %(levelname)s — %(message)s"
-)
+import logging
+from datetime import datetime
+
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s — %(levelname)s — %(message)s")
 logger = logging.getLogger("case-santander")
 
 
@@ -21,24 +20,24 @@ def monitorar_tabela(spark: SparkSession, tabela_uc: str) -> dict:
     inicio = datetime.now()
     partes = tabela_uc.split(".")
     camada = partes[1]
-    nome   = partes[2]
+    nome = partes[2]
 
     try:
-        df    = spark.sql(f"SELECT * FROM {tabela_uc}")
+        df = spark.sql(f"SELECT * FROM {tabela_uc}")
         total = df.count()
 
         if total == 0:
             logger.error(f"[ALERTA CRITICO] {tabela_uc} — Sem registros!")
             return {}
 
-        nulos = sum(df.select([
-            F.sum(F.col(c).isNull().cast("int")).alias(c)
-            for c in df.columns
-        ]).first().asDict().values())
+        nulos = sum(
+            df.select([F.sum(F.col(c).isNull().cast("int")).alias(c) for c in df.columns]).first().asDict().values()
+        )
 
         duplicatas = total - df.dropDuplicates().count()
-        qualidade  = round((1 - nulos / (total * len(df.columns))) * 100, 2)
+        qualidade = round((1 - nulos / (total * len(df.columns))) * 100, 2)
 
+        # fmt: off
         metricas = {
             "camada":           camada,
             "tabela":           nome,
@@ -49,6 +48,7 @@ def monitorar_tabela(spark: SparkSession, tabela_uc: str) -> dict:
             "qualidade_pct":    qualidade,
             "tempo_seg":        round((datetime.now() - inicio).total_seconds(), 2)
         }
+        # fmt: on
 
         logger.info(
             f"[{camada}][{nome}] Registros: {total} | "
