@@ -50,11 +50,13 @@ def main():
     # _change_type filtra somente inserções novas (insert), ignorando
     # updates/deletes que não se aplicam ao fluxo de streaming.
     try:
+        # fmt: off
         ultima_versao = spark.sql("""
             SELECT COALESCE(MAX(versao_cdf), 0)
             FROM case_santander.gold.observabilidade
             WHERE tabela = 'streaming'
         """).collect()[0][0]
+        # fmt: on
 
         # fmt: off
         df_cdf = spark.read \
@@ -72,9 +74,7 @@ def main():
     except Exception:
         # Fallback: leitura completa se CDF ainda nao estiver habilitado
         df_cdf = None
-        total_streaming = spark.sql(
-            "SELECT COUNT(*) as total FROM case_santander.silver.streaming"
-        ).collect()[0]["total"]
+        total_streaming = spark.sql("SELECT COUNT(*) as total FROM case_santander.silver.streaming").collect()[0]["total"]
         print(f"CDC indisponivel — leitura completa: {total_streaming} transacoes")
 
     if total_streaming == 0:
