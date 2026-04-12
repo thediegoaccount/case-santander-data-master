@@ -15,10 +15,7 @@ def extrair_world_bank(spark, storage_account: str) -> int:
                 print(f"  VAZIO: {nome}")
                 return pd.DataFrame()
             registros = data[1]
-            df = pd.DataFrame([{
-                "ano":   r["date"],
-                "valor": r["value"]
-            } for r in registros if r["value"] is not None])
+            df = pd.DataFrame([{"ano": r["date"], "valor": r["value"]} for r in registros if r["value"] is not None])
             if df.empty:
                 print(f"  VAZIO: {nome}")
                 return pd.DataFrame()
@@ -34,7 +31,7 @@ def extrair_world_bank(spark, storage_account: str) -> int:
 
     print("Extraindo World Bank...")
     df_pib = buscar("NY.GDP.MKTP.KD.ZG", "pib_anual")
-    df_desemprego = buscar("SL.UEM.TOTL.ZS",    "desemprego")
+    df_desemprego = buscar("SL.UEM.TOTL.ZS", "desemprego")
 
     dfs = [df for df in [df_pib, df_desemprego] if not df.empty]
 

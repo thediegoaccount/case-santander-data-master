@@ -1,15 +1,13 @@
 """
 Monitoramento de qualidade dos dados por camada
 """
+
 from pyspark.sql import functions as F
 from pyspark.sql import SparkSession
 from datetime import datetime
 import logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s — %(levelname)s — %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s — %(levelname)s — %(message)s")
 logger = logging.getLogger("case-santander")
 
 
@@ -31,10 +29,9 @@ def monitorar_tabela(spark: SparkSession, tabela_uc: str) -> dict:
             logger.error(f"[ALERTA CRITICO] {tabela_uc} — Sem registros!")
             return {}
 
-        nulos = sum(df.select([
-            F.sum(F.col(c).isNull().cast("int")).alias(c)
-            for c in df.columns
-        ]).first().asDict().values())
+        nulos = sum(
+            df.select([F.sum(F.col(c).isNull().cast("int")).alias(c) for c in df.columns]).first().asDict().values()
+        )
 
         duplicatas = total - df.dropDuplicates().count()
         qualidade = round((1 - nulos / (total * len(df.columns))) * 100, 2)

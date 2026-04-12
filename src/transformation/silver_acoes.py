@@ -1,6 +1,7 @@
 """
 Transformacao Bronze -> Silver para dados de acoes B3
 """
+
 from pyspark.sql import functions as F
 from pyspark.sql import SparkSession
 from datetime import datetime

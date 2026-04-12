@@ -1,6 +1,7 @@
 """
 Deteccao de fraude em ordens de clientes
 """
+
 from pyspark.sql import functions as F
 from pyspark.sql import SparkSession
 from datetime import datetime
@@ -17,11 +18,13 @@ def detectar_fraude(spark: SparkSession) -> int:
     print("Detectando fraudes...")
 
     df_ordens = spark.sql("SELECT * FROM case_santander.silver.ordens")
-    df_score = spark.sql("""
+    df_score = spark.sql(
+        """
         SELECT hash_cliente, score_risco,
                categoria_risco, limite_operacional
         FROM case_santander.gold.score_risco_clientes
-    """)
+    """
+    )
 
     # df_score tem ~7.900 linhas com apenas 4 colunas — cabe em broadcast
     # evitando shuffle de df_ordens (5.341 linhas) em sort-merge join

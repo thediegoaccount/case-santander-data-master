@@ -26,8 +26,10 @@ from src.config.settings import configure_adls
 def hash_id(valor):
     return hashlib.sha256(str(valor).encode()).hexdigest()[:16]
 
+
 def mascarar_sobrenome(sobrenome):
     return sobrenome[0] + "*" * (len(sobrenome) - 1)
+
 
 def classificar_perfil(score):
     if score >= 750:
@@ -36,6 +38,7 @@ def classificar_perfil(score):
         return "Moderado"
     else:
         return "Conservador"
+
 
 def classificar_saldo(balance):
     if balance == 0:
@@ -98,6 +101,7 @@ def main():
     df_clientes["data_extracao"]    = data_hoje
     # fmt: on
 
+    # fmt: off
     df_clientes_final = df_clientes[[
         "id_cliente", "hash_cliente", "sobrenome_masked",
         "CreditScore", "Geography", "Gender", "Age", "Tenure",
@@ -109,6 +113,7 @@ def main():
         "Balance": "saldo", "NumOfProducts": "num_produtos",
         "EstimatedSalary": "salario_estimado"
     })
+    # fmt: on
 
     # Gravar clientes no Bronze
     df_clientes_spark = spark.createDataFrame(df_clientes_final)

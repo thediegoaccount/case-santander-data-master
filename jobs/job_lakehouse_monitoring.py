@@ -41,7 +41,7 @@ def main():
                 full_name=tabela,
                 assets_dir=f"/Shared/monitoring/{tabela.replace('.', '/')}",
                 output_schema_name="case_santander.gold",
-                snapshot={}
+                snapshot={},
             )
             print(f"  ✅ Monitor criado: {tabela} → {monitor.status}")
         except Exception as e:

@@ -15,7 +15,9 @@ Tabelas geradas:
 Ou via Databricks Workflow:
     Task: t10_streaming_gold
 """
+
 import sys
+
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
 from databricks.connect import DatabricksSession

@@ -7,6 +7,7 @@ Tabelas geradas:
   - gold.volume_intraday       : volume negociado por ticker e hora do dia
   - gold.ranking_acoes_realtime: ranking de ativos por volume no dia atual
 """
+
 from pyspark.sql import functions as F
 from pyspark.sql import SparkSession
 from datetime import datetime
@@ -34,11 +35,13 @@ def detectar_fraude_streaming(spark: SparkSession) -> int:
     df_stream = spark.sql("SELECT * FROM case_santander.silver.streaming")
 
     # Usa o ano mais recente de performance como referencia de preco historico
+    # fmt: off
     df_perf = spark.sql("""
         SELECT ticker, preco_medio, volatilidade
         FROM case_santander.gold.performance_acoes
         WHERE ano = (SELECT MAX(ano) FROM case_santander.gold.performance_acoes)
     """)
+    # fmt: on
 
     # df_perf tem exatamente 9 linhas (9 tickers × 1 ano) — broadcast elimina
     # o sort-merge shuffle distribuindo a tabela inteira em cada executor
@@ -119,11 +122,13 @@ def detectar_anomalias_intraday(spark: SparkSession) -> int:
         )
     # fmt: on
 
+    # fmt: off
     df_perf = spark.sql("""
         SELECT ticker, preco_medio, volatilidade
         FROM case_santander.gold.performance_acoes
         WHERE ano = (SELECT MAX(ano) FROM case_santander.gold.performance_acoes)
     """)
+    # fmt: on
 
     # desvio_historico em R$: volatilidade (% stddev de variacao) * preco_medio / 100
     # df_hora tem no maximo 9 tickers × 24h = 216 linhas; df_perf = 9 linhas
@@ -191,11 +196,13 @@ def calcular_volume_intraday(spark: SparkSession) -> int:
         )
     # fmt: on
 
+    # fmt: off
     df_perf = spark.sql("""
         SELECT ticker, volume_medio
         FROM case_santander.gold.performance_acoes
         WHERE ano = (SELECT MAX(ano) FROM case_santander.gold.performance_acoes)
     """)
+    # fmt: on
 
     # fmt: off
     df_volume_intraday = df_vol \
@@ -261,11 +268,13 @@ def calcular_ranking_realtime(spark: SparkSession) -> int:
         )
     # fmt: on
 
+    # fmt: off
     df_perf = spark.sql("""
         SELECT ticker, empresa, setor, preco_medio as preco_medio_historico
         FROM case_santander.gold.performance_acoes
         WHERE ano = (SELECT MAX(ano) FROM case_santander.gold.performance_acoes)
     """)
+    # fmt: on
 
     # fmt: off
     df_ranking = df_rank \

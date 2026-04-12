@@ -1,17 +1,18 @@
 """
 Slowly Changing Dimensions (SCD) Type 2
 """
+
 from pyspark.sql import functions as F
 from pyspark.sql import SparkSession
 from datetime import datetime
 
 
-def aplicar_scd_type2(spark: SparkSession, df_novos,
-                      tabela_uc: str, chave: str) -> None:
+def aplicar_scd_type2(spark: SparkSession, df_novos, tabela_uc: str, chave: str) -> None:
     """
     Aplica SCD Type 2 em uma tabela Delta Lake via Unity Catalog.
     """
     from delta.tables import DeltaTable
+
     data_hoje = datetime.now().strftime("%Y-%m-%d")
 
     # fmt: off
@@ -62,59 +63,61 @@ def aplicar_scd_type2(spark: SparkSession, df_novos,
             raise e
 
 
-def aplicar_scd_clientes(spark: SparkSession,
-                         storage_account: str = None) -> int:
+def aplicar_scd_clientes(spark: SparkSession, storage_account: str = None) -> int:
     """
     Aplica SCD Type 2 na tabela de clientes via Unity Catalog.
     """
     print("Aplicando SCD Type 2 em clientes...")
 
-    df_clientes = spark.sql("""
+    df_clientes = spark.sql(
+        """
         SELECT
             id_cliente, hash_cliente, sobrenome_masked,
             perfil_risco, score_credito, faixa_saldo,
             faixa_etaria, score_categoria, ativo, churn
         FROM case_santander.silver.clientes
-    """)
+    """
+    )
 
-    aplicar_scd_type2(spark, df_clientes,
-                      "case_santander.silver.clientes_scd",
-                      "hash_cliente")
+    aplicar_scd_type2(spark, df_clientes, "case_santander.silver.clientes_scd", "hash_cliente")
 
-    total = spark.sql("""
+    total = spark.sql(
+        """
         SELECT COUNT(*) as total
         FROM case_santander.silver.clientes_scd
         WHERE atual = true
-    """).collect()[0]["total"]
+    """
+    ).collect()[0]["total"]
 
     print(f"SCD clientes — {total} registros ativos")
     return total
 
 
-def aplicar_scd_score_risco(spark: SparkSession,
-                             storage_account: str = None) -> int:
+def aplicar_scd_score_risco(spark: SparkSession, storage_account: str = None) -> int:
     """
     Aplica SCD Type 2 no score de risco via Unity Catalog.
     """
     print("Aplicando SCD Type 2 em score de risco...")
 
-    df_score = spark.sql("""
+    df_score = spark.sql(
+        """
         SELECT
             hash_cliente, perfil_risco, faixa_saldo,
             score_credito, score_risco, categoria_risco,
             limite_operacional, num_ativos, total_ordens
         FROM case_santander.gold.score_risco_clientes
-    """)
+    """
+    )
 
-    aplicar_scd_type2(spark, df_score,
-                      "case_santander.gold.score_risco_scd",
-                      "hash_cliente")
+    aplicar_scd_type2(spark, df_score, "case_santander.gold.score_risco_scd", "hash_cliente")
 
-    total = spark.sql("""
+    total = spark.sql(
+        """
         SELECT COUNT(*) as total
         FROM case_santander.gold.score_risco_scd
         WHERE atual = true
-    """).collect()[0]["total"]
+    """
+    ).collect()[0]["total"]
 
     print(f"SCD score risco — {total} registros ativos")
     return total

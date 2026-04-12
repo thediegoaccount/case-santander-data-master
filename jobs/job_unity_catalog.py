@@ -80,11 +80,13 @@ def main():
             print(f"  ⚠️ case_santander.bronze.{tabela} → {e}")
 
     # Tabelas Gold
+    # fmt: off
     tabelas_gold = {
         "performance_acoes": f"abfss://gold@{storage_account}.dfs.core.windows.net/performance_acoes/",
         "anomalias":         f"abfss://gold@{storage_account}.dfs.core.windows.net/anomalias/",
         "acoes_vs_cambio":   f"abfss://gold@{storage_account}.dfs.core.windows.net/acoes_vs_cambio/",
     }
+    # fmt: on
 
     for tabela, path in tabelas_gold.items():
         try:
@@ -137,10 +139,12 @@ def main():
 
     for tabela in tabelas_cdf:
         try:
+            # fmt: off
             spark.sql(f"""
                 ALTER TABLE {tabela}
                 SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
             """)
+            # fmt: on
             print(f"  ✅ CDF habilitado: {tabela}")
         except Exception as e:
             print(f"  ⚠️ {tabela}: {e}")

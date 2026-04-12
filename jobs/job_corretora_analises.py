@@ -27,10 +27,12 @@ def main():
     # GOLD 1 — Posicao do cliente (carteira)
     print("Calculando posicao dos clientes...")
     df_ordens = spark.sql("SELECT * FROM case_santander.silver.ordens")
+    # fmt: off
     df_clientes = spark.sql("""
         SELECT hash_cliente, perfil_risco, faixa_saldo, score_credito
         FROM case_santander.silver.clientes
     """)
+    # fmt: on
 
     # fmt: off
     df_posicao = df_ordens \

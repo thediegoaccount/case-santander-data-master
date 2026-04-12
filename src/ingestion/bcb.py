@@ -9,8 +9,10 @@ def extrair_bcb(spark, storage_account: str) -> int:
     data_final = "01/04/2026"
 
     def buscar_diario(codigo, nome):
-        url = (f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados"
-               f"?formato=json&dataInicial={data_inicial}&dataFinal={data_final}")
+        url = (
+            f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados"
+            f"?formato=json&dataInicial={data_inicial}&dataFinal={data_final}"
+        )
         try:
             response = requests.get(url, timeout=10)
             df = pd.DataFrame(response.json())
@@ -38,8 +40,8 @@ def extrair_bcb(spark, storage_account: str) -> int:
             return pd.DataFrame()
 
     print("Extraindo BCB...")
-    df_selic = buscar_diario(11,  "selic")
-    df_cambio = buscar_diario(1,   "cambio_usd_brl")
+    df_selic = buscar_diario(11, "selic")
+    df_cambio = buscar_diario(1, "cambio_usd_brl")
     df_ipca = buscar_mensal(433, "ipca")
     df_bcb = pd.concat([df_selic, df_cambio, df_ipca], ignore_index=True)
 
