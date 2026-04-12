@@ -8,9 +8,10 @@ Tabelas geradas:
   - gold.ranking_acoes_realtime: ranking de ativos por volume no dia atual
 """
 
-from pyspark.sql import functions as F
-from pyspark.sql import SparkSession
 from datetime import datetime
+
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
 
 
 def detectar_fraude_streaming(spark: SparkSession) -> int:

@@ -6,14 +6,15 @@ import sys
 
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
-from databricks.connect import DatabricksSession
-from databricks.sdk.runtime import dbutils
 from datetime import datetime
 
+from databricks.connect import DatabricksSession
+from databricks.sdk.runtime import dbutils
+
 from src.config.settings import configure_adls
-from src.ingestion.yahoo_finance import extrair_acoes
 from src.ingestion.bcb import extrair_bcb
 from src.ingestion.world_bank import extrair_world_bank
+from src.ingestion.yahoo_finance import extrair_acoes
 
 
 def main():

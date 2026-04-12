@@ -1,6 +1,7 @@
-import requests
-import pandas as pd
 from datetime import datetime
+
+import pandas as pd
+import requests
 
 
 def extrair_bcb(spark, storage_account: str) -> int:

@@ -1,7 +1,8 @@
+from datetime import datetime
+
+from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
-from pyspark.sql import SparkSession
-from datetime import datetime
 
 
 def detectar_anomalias(spark: SparkSession, storage_account: str) -> int:

@@ -2,9 +2,10 @@
 Deteccao de fraude em ordens de clientes
 """
 
-from pyspark.sql import functions as F
-from pyspark.sql import SparkSession
 from datetime import datetime
+
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
 
 
 def detectar_fraude(spark: SparkSession) -> int:

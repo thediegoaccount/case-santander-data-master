@@ -6,14 +6,15 @@ import sys
 
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
+from datetime import datetime
+
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
-from datetime import datetime
 
 from src.config.settings import configure_adls
 from src.gold.anomalias import detectar_anomalias
-from src.gold.performance import calcular_performance
 from src.gold.fraude import detectar_fraude
+from src.gold.performance import calcular_performance
 
 
 def main():

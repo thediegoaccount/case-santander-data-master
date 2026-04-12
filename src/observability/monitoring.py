@@ -2,10 +2,11 @@
 Monitoramento de qualidade dos dados por camada
 """
 
-from pyspark.sql import functions as F
-from pyspark.sql import SparkSession
-from datetime import datetime
 import logging
+from datetime import datetime
+
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s — %(levelname)s — %(message)s")
 logger = logging.getLogger("case-santander")

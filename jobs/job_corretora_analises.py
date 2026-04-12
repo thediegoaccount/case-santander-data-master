@@ -10,10 +10,11 @@ import sys
 
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
+from datetime import datetime
+
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
 from pyspark.sql import functions as F
-from datetime import datetime
 
 
 def main():

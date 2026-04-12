@@ -2,9 +2,10 @@
 Slowly Changing Dimensions (SCD) Type 2
 """
 
-from pyspark.sql import functions as F
-from pyspark.sql import SparkSession
 from datetime import datetime
+
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
 
 
 def aplicar_scd_type2(spark: SparkSession, df_novos, tabela_uc: str, chave: str) -> None:

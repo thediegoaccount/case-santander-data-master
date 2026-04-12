@@ -20,15 +20,17 @@ import sys
 
 sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
 
+from datetime import datetime
+
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
-from datetime import datetime
+
 from src.config.settings import configure_adls
 from src.gold.streaming_gold import (
-    detectar_fraude_streaming,
-    detectar_anomalias_intraday,
-    calcular_volume_intraday,
     calcular_ranking_realtime,
+    calcular_volume_intraday,
+    detectar_anomalias_intraday,
+    detectar_fraude_streaming,
 )
 
 
