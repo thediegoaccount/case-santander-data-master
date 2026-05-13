@@ -391,6 +391,8 @@ jobs:
     name: "Deploy → PROD"
     runs-on: ubuntu-latest
     needs: [deploy-hk]
+    permissions:
+      contents: write
     environment:
       name: prod
       url: ${{ vars.DATABRICKS_WORKSPACE_URL }}
