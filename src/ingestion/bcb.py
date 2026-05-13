@@ -121,10 +121,10 @@ def extrair_bcb(spark, storage_account: str) -> int:
     # IPCA é mensal mas API exige filtro mesmo assim
     df_selic = buscar_serie(11, "selic", data_inicial, data_final)
     time.sleep(1)  # Pequena pausa entre chamadas para evitar rate limit
-    
+
     df_cambio = buscar_serie(1, "cambio_usd_brl", data_inicial, data_final)
     time.sleep(1)
-    
+
     df_ipca = buscar_serie(433, "ipca", data_inicial, data_final)
 
     # Filtrar DataFrames vazios antes de concatenar
