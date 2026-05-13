@@ -34,7 +34,7 @@ def extrair_bcb(spark, storage_account: str) -> int:
                 if response.status_code != 200:
                     print(f"  ⚠️  {nome} — HTTP {response.status_code} (tentativa {tentativa}/{max_retries})")
                     if tentativa < max_retries:
-                        time.sleep(2 ** tentativa)
+                        time.sleep(2**tentativa)
                         continue
                     print(f"  ERRO: {nome} — HTTP {response.status_code} após {max_retries} tentativas")
                     return pd.DataFrame()
@@ -43,7 +43,7 @@ def extrair_bcb(spark, storage_account: str) -> int:
                 if not response.text or response.text.strip() == "":
                     print(f"  ⚠️  {nome} — Response vazio (tentativa {tentativa}/{max_retries})")
                     if tentativa < max_retries:
-                        time.sleep(2 ** tentativa)
+                        time.sleep(2**tentativa)
                         continue
                     print(f"  ERRO: {nome} — Response vazio após {max_retries} tentativas")
                     return pd.DataFrame()
@@ -54,7 +54,7 @@ def extrair_bcb(spark, storage_account: str) -> int:
                     print(f"  ⚠️  {nome} — Content-Type inválido: {content_type} (tentativa {tentativa}/{max_retries})")
                     print(f"     Primeiros 100 chars: {response.text[:100]}")
                     if tentativa < max_retries:
-                        time.sleep(2 ** tentativa)
+                        time.sleep(2**tentativa)
                         continue
                     print(f"  ERRO: {nome} — API não retornou JSON")
                     return pd.DataFrame()
@@ -66,7 +66,7 @@ def extrair_bcb(spark, storage_account: str) -> int:
                     print(f"  ⚠️  {nome} — JSON inválido: {str(json_err)[:80]} (tentativa {tentativa}/{max_retries})")
                     print(f"     Primeiros 100 chars: {response.text[:100]}")
                     if tentativa < max_retries:
-                        time.sleep(2 ** tentativa)
+                        time.sleep(2**tentativa)
                         continue
                     print(f"  ERRO: {nome} — JSON inválido após {max_retries} tentativas")
                     return pd.DataFrame()
@@ -96,7 +96,7 @@ def extrair_bcb(spark, storage_account: str) -> int:
             except requests.exceptions.Timeout:
                 print(f"  ⚠️  {nome} — Timeout (tentativa {tentativa}/{max_retries})")
                 if tentativa < max_retries:
-                    time.sleep(2 ** tentativa)
+                    time.sleep(2**tentativa)
                     continue
                 print(f"  ERRO: {nome} — Timeout após {max_retries} tentativas")
                 return pd.DataFrame()
@@ -104,7 +104,7 @@ def extrair_bcb(spark, storage_account: str) -> int:
             except requests.exceptions.ConnectionError as e:
                 print(f"  ⚠️  {nome} — Erro de conexão (tentativa {tentativa}/{max_retries})")
                 if tentativa < max_retries:
-                    time.sleep(2 ** tentativa)
+                    time.sleep(2**tentativa)
                     continue
                 print(f"  ERRO: {nome} — {str(e)[:80]}")
                 return pd.DataFrame()
