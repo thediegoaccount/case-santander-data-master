@@ -31,7 +31,15 @@ def main():
     client_secret = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
     storage_account = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
 
+    # CONFIGURAR ADLS IMEDIATAMENTE
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
+    
+    # Adicionar configs OAuth extras (redundância pra garantir)
+    spark.conf.set(f"fs.azure.account.auth.type.{storage_account}.dfs.core.windows.net", "OAuth")
+    spark.conf.set(f"fs.azure.account.oauth.provider.type.{storage_account}.dfs.core.windows.net", "org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider")
+    spark.conf.set(f"fs.azure.account.oauth2.client.id.{storage_account}.dfs.core.windows.net", client_id)
+    spark.conf.set(f"fs.azure.account.oauth2.client.secret.{storage_account}.dfs.core.windows.net", client_secret)
+    spark.conf.set(f"fs.azure.account.oauth2.client.endpoint.{storage_account}.dfs.core.windows.net", f"https://login.microsoftonline.com/{tenant_id}/oauth2/token")
 
     bronze_kafka_path = f"abfss://bronze@{storage_account}.dfs.core.windows.net/kafka/"
     silver_streaming_path = f"abfss://silver@{storage_account}.dfs.core.windows.net/streaming/"
@@ -78,41 +86,3 @@ def main():
             .when(F.col("quantidade") > 5000, "Volume Medio")
             .otherwise("Normal")) \
         .withColumn("alerta_preco",
-            F.when(F.col("preco") > 80, "Preco Alto")
-            .when(F.col("preco") < 15, "Preco Baixo")
-            .otherwise("Normal")) \
-        .withColumn("processado_em", F.lit(datetime.now().isoformat()))
-
-    # Limpar destino e recriar
-    dbutils.fs.rm(silver_streaming_path, recurse=True)
-
-    query = df_processado.writeStream \
-        .format("delta") \
-        .outputMode("append") \
-        .option("checkpointLocation", checkpoint_path) \
-        .option("mergeSchema", "true") \
-        .trigger(availableNow=True) \
-        .start(silver_streaming_path)
-
-    query.awaitTermination()
-    print("✅ Streaming processado!")
-
-    # Registrar no Unity Catalog
-    spark.sql("DROP TABLE IF EXISTS case_santander.silver.streaming")
-    df_resultado = spark.read.format("delta").load(silver_streaming_path)
-    df_resultado.write \
-        .format("delta") \
-        .mode("overwrite") \
-        .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.silver.streaming")
-    # fmt: on
-
-    total = spark.sql("SELECT COUNT(*) as total FROM case_santander.silver.streaming").collect()[0]["total"]
-    print(f"✅ case_santander.silver.streaming → {total} registros")
-
-    fim = datetime.now()
-    print("\n=== JOB STREAMING CONCLUIDO ===")
-    print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
-
-
-main()
