@@ -86,3 +86,41 @@ def main():
             .when(F.col("quantidade") > 5000, "Volume Medio")
             .otherwise("Normal")) \
         .withColumn("alerta_preco",
+            F.when(F.col("preco") > 80, "Preco Alto")
+            .when(F.col("preco") < 15, "Preco Baixo")
+            .otherwise("Normal")) \
+        .withColumn("processado_em", F.lit(datetime.now().isoformat()))
+
+    # Limpar destino e recriar
+    dbutils.fs.rm(silver_streaming_path, recurse=True)
+
+    query = df_processado.writeStream \
+        .format("delta") \
+        .outputMode("append") \
+        .option("checkpointLocation", checkpoint_path) \
+        .option("mergeSchema", "true") \
+        .trigger(availableNow=True) \
+        .start(silver_streaming_path)
+
+    query.awaitTermination()
+    print("✅ Streaming processado!")
+
+    # Registrar no Unity Catalog
+    spark.sql("DROP TABLE IF EXISTS case_santander.silver.streaming")
+    df_resultado = spark.read.format("delta").load(silver_streaming_path)
+    df_resultado.write \
+        .format("delta") \
+        .mode("overwrite") \
+        .option("mergeSchema", "true") \
+        .saveAsTable("case_santander.silver.streaming")
+    # fmt: on
+
+    total = spark.sql("SELECT COUNT(*) as total FROM case_santander.silver.streaming").collect()[0]["total"]
+    print(f"✅ case_santander.silver.streaming → {total} registros")
+
+    fim = datetime.now()
+    print("\n=== JOB STREAMING CONCLUIDO ===")
+    print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
+
+
+main()
