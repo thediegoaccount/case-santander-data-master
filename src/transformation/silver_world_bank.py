@@ -11,7 +11,7 @@ def transformar_world_bank(spark: SparkSession, storage_account: str) -> int:
 
     print("Transformando World Bank Bronze -> Silver...")
 
-    df = spark.read.parquet(bronze_path)
+    df = spark.read.option("basePath", bronze_path).parquet(f"{bronze_path}extracao=*/")
     print("Colunas disponíveis:", df.columns)
 
     # Compatível com schema antigo (data) e novo (ano)
