@@ -43,10 +43,10 @@ def main():
     }
 
     # Tabelas Bronze em formato Delta
-    #tabelas_bronze_delta = {
+    # tabelas_bronze_delta = {
     #    "clientes": f"abfss://bronze@{storage_account}.dfs.core.windows.net/clientes/",
     #    "ordens":   f"abfss://bronze@{storage_account}.dfs.core.windows.net/ordens/",
-    #}
+    # }
     # fmt: on
 
     for tabela, path in tabelas_bronze_parquet.items():
@@ -68,7 +68,7 @@ def main():
         except Exception as e:
             print(f"  ⚠️ case_santander.bronze.{tabela} → {e}")
 
-    #for tabela, path in tabelas_bronze_delta.items():
+    # for tabela, path in tabelas_bronze_delta.items():
     #    try:
     #        spark.sql(f"DROP TABLE IF EXISTS case_santander.bronze.{tabela}")
     #        df = spark.read.format("delta").load(path)
