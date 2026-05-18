@@ -72,22 +72,22 @@ def main():
     #    try:
     #        spark.sql(f"DROP TABLE IF EXISTS case_santander.bronze.{tabela}")
     #        df = spark.read.format("delta").load(path)
-     #       # fmt: off
+    #        # fmt: off
     #        df.write \
     #            .format("delta") \
     #            .mode("overwrite") \
     #            .option("mergeSchema", "true") \
     #            .saveAsTable(f"case_santander.bronze.{tabela}")
-    #       # fmt: on
+    #        # fmt: on
     #        count = spark.sql(f"SELECT COUNT(*) as total FROM case_santander.bronze.{tabela}").collect()[0]["total"]
     #        print(f"  ✅ case_santander.bronze.{tabela} → {count} registros")
     #    except Exception as e:
     #        print(f"  ⚠️ case_santander.bronze.{tabela} → {e}")
     # clientes e ordens são criados posteriormente por job_clientes_ordens.py
-    
+
     # como tabelas gerenciadas no Unity Catalog, sem leitura de paths ADLS aqui.
     # Tabelas Gold
-    
+
     # fmt: off
     tabelas_gold = {
         "performance_acoes": f"abfss://gold@{storage_account}.dfs.core.windows.net/performance_acoes/",
