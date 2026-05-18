@@ -43,16 +43,19 @@ def main():
     }
 
     # Tabelas Bronze em formato Delta
-    tabelas_bronze_delta = {
-        "clientes": f"abfss://bronze@{storage_account}.dfs.core.windows.net/clientes/",
-        "ordens":   f"abfss://bronze@{storage_account}.dfs.core.windows.net/ordens/",
-    }
+    # tabelas_bronze_delta = {
+    #    "clientes": f"abfss://bronze@{storage_account}.dfs.core.windows.net/clientes/",
+    #    "ordens":   f"abfss://bronze@{storage_account}.dfs.core.windows.net/ordens/",
+    # }
     # fmt: on
 
     for tabela, path in tabelas_bronze_parquet.items():
         try:
             spark.sql(f"DROP TABLE IF EXISTS case_santander.bronze.{tabela}")
-            df = spark.read.format("parquet").load(path)
+            if tabela in {"bcb", "world_bank"}:
+                df = spark.read.option("basePath", path).format("parquet").load(f"{path}extracao=*/")
+            else:
+                df = spark.read.format("parquet").load(path)
             # fmt: off
             df.write \
                 .format("delta") \
@@ -65,23 +68,26 @@ def main():
         except Exception as e:
             print(f"  ⚠️ case_santander.bronze.{tabela} → {e}")
 
-    for tabela, path in tabelas_bronze_delta.items():
-        try:
-            spark.sql(f"DROP TABLE IF EXISTS case_santander.bronze.{tabela}")
-            df = spark.read.format("delta").load(path)
-            # fmt: off
-            df.write \
-                .format("delta") \
-                .mode("overwrite") \
-                .option("mergeSchema", "true") \
-                .saveAsTable(f"case_santander.bronze.{tabela}")
-            # fmt: on
-            count = spark.sql(f"SELECT COUNT(*) as total FROM case_santander.bronze.{tabela}").collect()[0]["total"]
-            print(f"  ✅ case_santander.bronze.{tabela} → {count} registros")
-        except Exception as e:
-            print(f"  ⚠️ case_santander.bronze.{tabela} → {e}")
+    # for tabela, path in tabelas_bronze_delta.items():
+    #    try:
+    #        spark.sql(f"DROP TABLE IF EXISTS case_santander.bronze.{tabela}")
+    #        df = spark.read.format("delta").load(path)
+    #        # fmt: off
+    #        df.write \
+    #            .format("delta") \
+    #            .mode("overwrite") \
+    #            .option("mergeSchema", "true") \
+    #            .saveAsTable(f"case_santander.bronze.{tabela}")
+    #        # fmt: on
+    #        count = spark.sql(f"SELECT COUNT(*) as total FROM case_santander.bronze.{tabela}").collect()[0]["total"]
+    #        print(f"  ✅ case_santander.bronze.{tabela} → {count} registros")
+    #    except Exception as e:
+    #        print(f"  ⚠️ case_santander.bronze.{tabela} → {e}")
+    # clientes e ordens são criados posteriormente por job_clientes_ordens.py
 
+    # como tabelas gerenciadas no Unity Catalog, sem leitura de paths ADLS aqui.
     # Tabelas Gold
+
     # fmt: off
     tabelas_gold = {
         "performance_acoes": f"abfss://gold@{storage_account}.dfs.core.windows.net/performance_acoes/",
@@ -156,4 +162,5 @@ def main():
     print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
 
-main()
+if __name__ == "__main__":
+    main()

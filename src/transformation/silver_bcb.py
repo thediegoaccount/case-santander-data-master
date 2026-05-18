@@ -11,7 +11,7 @@ def transformar_bcb(spark: SparkSession, storage_account: str) -> int:
 
     print("Transformando BCB Bronze -> Silver...")
 
-    df = spark.read.parquet(bronze_path)
+    df = spark.read.option("basePath", bronze_path).parquet(f"{bronze_path}extracao=*/")
     print("Schema Bronze:")
     df.printSchema()
     print("Amostra:")
