@@ -110,9 +110,10 @@ def main():
     total = spark.sql("SELECT COUNT(*) as total FROM case_santander.silver.streaming").collect()[0]["total"]
     print(f"✅ case_santander.silver.streaming → {total} registros")
 
-fim = datetime.now()
+    fim = datetime.now()
     print("\n=== JOB STREAMING CONCLUIDO ===")
     print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
+
 
 if __name__ == "__main__":
     main()
