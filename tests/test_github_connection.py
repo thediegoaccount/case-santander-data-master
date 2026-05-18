@@ -7,8 +7,8 @@ ou cole o conteúdo diretamente em uma célula Python.
 """
 
 import json
-import urllib.request
 import urllib.error
+import urllib.request
 
 
 def _get_host_and_token():
