@@ -53,7 +53,7 @@ def main():
                 .mode("overwrite") \
                 .save()
             # fmt: on
-            print(f"  ✅ {tabela_sql} → {df.count()} registros")
+            print(f"  ✅ {tabela_sql} carregado")
         except Exception as e:
             print(f"  ❌ {tabela_sql} → {e}")
 

@@ -498,14 +498,22 @@ Nome: pipeline-case-santander
 Tasks (em ordem):
 
 - t0_unity_catalog_bronze → jobs/job_unity_catalog.py (Git)
-- t1_extracao → jobs/job_extracao.py (Git) depende: t0
-- t5_streaming → jobs/job_streaming.py (Git) depende: t1
-- t6_clientes_ordens → jobs/job_clientes_ordens.py (Git) depende: t1
-- t2_silver → jobs/job_silver.py (Git) depende: t5, t6
-- t7_corretora_analises → jobs/job_corretora_analises.py (Git) depende: t6
+- t1_extracao_acoes → jobs/job_extracao_acoes.py (Git) depende: t0
+- t1_extracao_bcb → jobs/job_extracao_bcb.py (Git) depende: t0
+- t1_extracao_world_bank → jobs/job_extracao_world_bank.py (Git) depende: t0
+- t5_streaming → jobs/job_streaming.py (Git) depende: t1_extracao_acoes, t1_extracao_bcb, t1_extracao_world_bank
+- t6_clientes_ordens → jobs/job_clientes_ordens.py (Git) depende: t1_extracao_acoes, t1_extracao_bcb, t1_extracao_world_bank
+- t6_clientes_silver → jobs/job_clientes_silver.py (Git) depende: t6_clientes_ordens
+- t2_silver_acoes → jobs/job_silver_acoes.py (Git) depende: t5, t6_clientes_silver
+- t2_silver_bcb → jobs/job_silver_bcb.py (Git) depende: t5, t6_clientes_silver
+- t2_silver_world_bank → jobs/job_silver_world_bank.py (Git) depende: t5, t6_clientes_silver
+- t7_corretora_analises → jobs/job_corretora_analises.py (Git) depende: t6_clientes_silver
 - t9_scd → jobs/job_scd.py (Git) depende: t7
-- t3_gold → jobs/job_gold.py (Git) depende: t2, t9
-- t8_lakehouse_monitoring → jobs/job_lakehouse_monitoring.py (Git) depende: t3
+- t3_gold → jobs/job_gold.py (Git) depende: t2_silver_acoes, t2_silver_bcb, t2_silver_world_bank, t9
+- t10_streaming_gold → jobs/job_streaming_to_gold.py (Git) depende: t3_gold
+- t8_lakehouse_monitoring → jobs/job_lakehouse_monitoring.py (Git) depende: t10_streaming_gold
+- t_sql → jobs/job_carga_sql.py (Git) depende: t10_streaming_gold
+- t4_observabilidade → jobs/job_observabilidade.py (Git) depende: t8_lakehouse_monitoring, t_sql
 - t_sql → jobs/job_carga_sql.py (Git) depende: t3
 - t4_observabilidade → jobs/job_observabilidade.py (Git) depende: t8, t_sql
 

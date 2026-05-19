@@ -63,8 +63,7 @@ def main():
                 .option("mergeSchema", "true") \
                 .saveAsTable(f"case_santander.bronze.{tabela}")
             # fmt: on
-            count = spark.sql(f"SELECT COUNT(*) as total FROM case_santander.bronze.{tabela}").collect()[0]["total"]
-            print(f"  ✅ case_santander.bronze.{tabela} → {count} registros")
+            print(f"  ✅ case_santander.bronze.{tabela} gravado")
         except Exception as e:
             print(f"  ⚠️ case_santander.bronze.{tabela} → {e}")
 
@@ -107,8 +106,7 @@ def main():
                 .option("mergeSchema", "true") \
                 .saveAsTable(f"case_santander.gold.{tabela}")
             # fmt: on
-            count = spark.sql(f"SELECT COUNT(*) as total FROM case_santander.gold.{tabela}").collect()[0]["total"]
-            print(f"  ✅ case_santander.gold.{tabela} → {count} registros")
+            print(f"  ✅ case_santander.gold.{tabela} gravado")
         except Exception as e:
             print(f"  ⚠️ case_santander.gold.{tabela} → {e}")
 

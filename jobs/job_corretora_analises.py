@@ -61,7 +61,7 @@ def main():
     df_posicao.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.gold.posicao_clientes")
-    print(f"✅ gold.posicao_clientes → {df_posicao.count()} registros")
+    print("✅ gold.posicao_clientes gravado")
 
     # GOLD 2 — Score de risco
     print("Calculando score de risco...")
@@ -114,7 +114,7 @@ def main():
     df_score.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.gold.score_risco_clientes")
-    print(f"✅ gold.score_risco_clientes → {df_score.count()} registros")
+    print("✅ gold.score_risco_clientes gravado")
 
     # GOLD 3 — Perfil clientes
     df_perfil = spark.sql("""
@@ -133,7 +133,7 @@ def main():
     df_perfil.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.gold.perfil_clientes")
-    print(f"✅ gold.perfil_clientes → {df_perfil.count()} registros")
+    print("✅ gold.perfil_clientes gravado")
 
     # GOLD 4 — Ordens consolidadas
     df_ordens_gold = spark.sql("""
@@ -149,7 +149,7 @@ def main():
     df_ordens_gold.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.gold.ordens_consolidadas")
-    print(f"✅ gold.ordens_consolidadas → {df_ordens_gold.count()} registros")
+    print("✅ gold.ordens_consolidadas gravado")
 
     # GOLD 5 — Ranking acoes por perfil
     df_ranking = spark.sql("""
@@ -165,7 +165,7 @@ def main():
     df_ranking.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.gold.ranking_acoes_perfil")
-    print(f"✅ gold.ranking_acoes_perfil → {df_ranking.count()} registros")
+    print("✅ gold.ranking_acoes_perfil gravado")
 
     # Carga SQL Database
     print("Carregando no SQL Database...")
@@ -185,7 +185,7 @@ def main():
                 .option("dbtable", tabela_sql) \
                 .option("driver", "com.microsoft.sqlserver.jdbc.SQLServerDriver") \
                 .mode("overwrite").save()
-            print(f"  ✅ {tabela_sql} → {df.count()} registros")
+            print(f"  ✅ {tabela_sql} carregado")
         except Exception as e:
             print(f"  ❌ {tabela_sql} → {e}")
     # fmt: on

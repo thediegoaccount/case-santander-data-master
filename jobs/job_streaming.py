@@ -107,8 +107,7 @@ def main():
         .saveAsTable("case_santander.silver.streaming")
     # fmt: on
 
-    total = spark.sql("SELECT COUNT(*) as total FROM case_santander.silver.streaming").collect()[0]["total"]
-    print(f"✅ case_santander.silver.streaming → {total} registros")
+    print("✅ case_santander.silver.streaming gravado")
 
     fim = datetime.now()
     print("\n=== JOB STREAMING CONCLUIDO ===")
