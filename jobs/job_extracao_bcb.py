@@ -28,7 +28,7 @@ def main():
 
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
 
-    total_bcb = extrair_bcb(spark, storage_account)
+    extrair_bcb(spark, storage_account)
 
     fim = datetime.now()
     print("\n=== JOB EXTRACAO_BCB CONCLUIDO ===")

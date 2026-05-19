@@ -93,7 +93,7 @@ def main():
     print(f"✅ gold.anomalias_intraday → {total_anomalias} anomalias detectadas")
 
     # GOLD 3 — Volume intraday por ticker e hora
-    total_vol = calcular_volume_intraday(spark)
+    calcular_volume_intraday(spark)
     print("✅ gold.volume_intraday gravado")
 
     # GOLD 4 — Ranking de ativos em tempo real

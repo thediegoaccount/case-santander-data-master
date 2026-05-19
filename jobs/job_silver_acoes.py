@@ -28,7 +28,7 @@ def main():
 
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
 
-    total_acoes = transformar_acoes(spark, storage_account)
+    transformar_acoes(spark, storage_account)
 
     fim = datetime.now()
     print("\n=== JOB SILVER_ACOES CONCLUIDO ===")
