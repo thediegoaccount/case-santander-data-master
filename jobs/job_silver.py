@@ -36,9 +36,9 @@ def main():
 
     fim = datetime.now()
     print("\n=== JOB SILVER CONCLUIDO ===")
-    print(f"Acoes:      {total_acoes} registros")
-    print(f"BCB:        {total_bcb} registros")
-    print(f"World Bank: {total_wb} registros")
+    print("Acoes gravadas")
+    print("BCB gravado")
+    print("World Bank gravado")
     print(f"Duracao:    {(fim - inicio).total_seconds():.2f}s")
 
 

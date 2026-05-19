@@ -1,16 +1,34 @@
 """
 DAG: Pipeline Corretora Santander
 Orquestra o pipeline completo de dados financeiros via Airflow + Databricks.
+
+Fluxo de dados:
+  [setup]
+    t0_unity_catalog
+  [ingestion]  — todos em paralelo após t0
+    t1_extracao_acoes | t1_extracao_bcb | t1_extracao_world_bank | t5_streaming | t6_clientes_ordens
+  [silver]  — cada fonte alimenta apenas sua própria Silver
+    t1_acoes → t2_silver_acoes
+    t1_bcb   → t2_silver_bcb
+    t1_world_bank → t2_silver_world_bank
+    t6       → t6_clientes_silver
+  [gold]  — pipelines paralelos
+    [t2_acoes, t2_bcb, t2_world_bank] → t3_gold          (anomalias, performance, fraude de mercado)
+    t6_silver → t7_corretora_analises → t9_scd            (posição, score, SCD clientes)
+    [t3_gold, t5_streaming] → t10_streaming_gold          (fraude/anomalias intraday)
+  [finalizacao]
+    [t3, t7, t9, t10] → t8_lakehouse_monitoring | t_carga_sql → t4_observabilidade
 """
+
+import os
+from datetime import datetime, timedelta
+
 from airflow import DAG
 from airflow.providers.databricks.operators.databricks import DatabricksSubmitRunOperator
-from datetime import datetime, timedelta
-import os
+from airflow.utils.task_group import TaskGroup
 
-DATABRICKS_HOST  = os.getenv("DATABRICKS_HOST")
-DATABRICKS_TOKEN = os.getenv("DATABRICKS_TOKEN")
-CLUSTER_ID       = "0401-150803-wefgy1hc"
-REPO_PATH        = "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master"
+CLUSTER_ID = "0401-150803-wefgy1hc"
+REPO_PATH  = "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master"
 
 default_args = {
     "owner":            "santander",
@@ -19,14 +37,18 @@ default_args = {
     "email_on_failure": False,
 }
 
-def make_task(task_id: str, job_path: str) -> dict:
-    """Cria configuracao de task para Databricks"""
-    return {
-        "existing_cluster_id": CLUSTER_ID,
-        "spark_python_task": {
-            "python_file": f"{REPO_PATH}/{job_path}",
-        }
-    }
+
+def databricks_task(task_id: str, job_path: str) -> DatabricksSubmitRunOperator:
+    return DatabricksSubmitRunOperator(
+        task_id=task_id,
+        databricks_conn_id="databricks_default",
+        json={
+            "existing_cluster_id": CLUSTER_ID,
+            "spark_python_task": {
+                "python_file": f"{REPO_PATH}/{job_path}",
+            },
+        },
+    )
 
 
 with DAG(
@@ -36,87 +58,59 @@ with DAG(
     schedule_interval="0 6 * * *",  # 06:00 Brasília
     start_date=datetime(2026, 1, 1),
     catchup=False,
-    tags=["santander", "databricks", "financeiro"]
+    tags=["santander", "databricks", "financeiro"],
 ) as dag:
 
-    t0 = DatabricksSubmitRunOperator(
-        task_id="t0_unity_catalog",
-        databricks_conn_id="databricks_default",
-        json=make_task("t0_unity_catalog", "jobs/job_unity_catalog.py")
-    )
+    # ── Setup ──────────────────────────────────────────────────────────────
+    t0 = databricks_task("t0_unity_catalog", "jobs/job_unity_catalog.py")
 
-    t1 = DatabricksSubmitRunOperator(
-        task_id="t1_extracao",
-        databricks_conn_id="databricks_default",
-        json=make_task("t1_extracao", "jobs/job_extracao.py")
-    )
+    # ── Ingestion ──────────────────────────────────────────────────────────
+    with TaskGroup("ingestion") as tg_ingestion:
+        t1_acoes      = databricks_task("t1_extracao_acoes",      "jobs/job_extracao_acoes.py")
+        t1_bcb        = databricks_task("t1_extracao_bcb",        "jobs/job_extracao_bcb.py")
+        t1_world_bank = databricks_task("t1_extracao_world_bank", "jobs/job_extracao_world_bank.py")
+        t5            = databricks_task("t5_streaming",            "jobs/job_streaming.py")
+        t6            = databricks_task("t6_clientes_ordens",      "jobs/job_clientes_ordens.py")
 
-    t5 = DatabricksSubmitRunOperator(
-        task_id="t5_streaming",
-        databricks_conn_id="databricks_default",
-        json=make_task("t5_streaming", "jobs/job_streaming.py")
-    )
+    # ── Silver ─────────────────────────────────────────────────────────────
+    with TaskGroup("silver") as tg_silver:
+        t2_acoes      = databricks_task("t2_silver_acoes",       "jobs/job_silver_acoes.py")
+        t2_bcb        = databricks_task("t2_silver_bcb",         "jobs/job_silver_bcb.py")
+        t2_world_bank = databricks_task("t2_silver_world_bank",  "jobs/job_silver_world_bank.py")
+        t6_silver     = databricks_task("t6_clientes_silver",    "jobs/job_clientes_silver.py")
 
-    t6 = DatabricksSubmitRunOperator(
-        task_id="t6_clientes_ordens",
-        databricks_conn_id="databricks_default",
-        json=make_task("t6_clientes_ordens", "jobs/job_clientes_ordens.py")
-    )
+    # ── Gold ───────────────────────────────────────────────────────────────
+    with TaskGroup("gold") as tg_gold:
+        t3  = databricks_task("t3_gold",               "jobs/job_gold.py")
+        t7  = databricks_task("t7_corretora_analises", "jobs/job_corretora_analises.py")
+        t9  = databricks_task("t9_scd",                "jobs/job_scd.py")
+        t10 = databricks_task("t10_streaming_gold",    "jobs/job_streaming_to_gold.py")
 
-    t2 = DatabricksSubmitRunOperator(
-        task_id="t2_silver",
-        databricks_conn_id="databricks_default",
-        json=make_task("t2_silver", "jobs/job_silver.py")
-    )
+    # ── Finalização ────────────────────────────────────────────────────────
+    with TaskGroup("finalizacao") as tg_finalizacao:
+        t8    = databricks_task("t8_lakehouse_monitoring", "jobs/job_lakehouse_monitoring.py")
+        t_sql = databricks_task("t_carga_sql",             "jobs/job_carga_sql.py")
+        t4    = databricks_task("t4_observabilidade",      "jobs/job_observabilidade.py")
 
-    t7 = DatabricksSubmitRunOperator(
-        task_id="t7_corretora_analises",
-        databricks_conn_id="databricks_default",
-        json=make_task("t7_corretora_analises", "jobs/job_corretora_analises.py")
-    )
+    # ── Dependências ───────────────────────────────────────────────────────
 
-    t9 = DatabricksSubmitRunOperator(
-        task_id="t9_scd",
-        databricks_conn_id="databricks_default",
-        json=make_task("t9_scd", "jobs/job_scd.py")
-    )
+    # Setup → todas as ingestões em paralelo (streaming e clientes NÃO dependem de mercado)
+    t0 >> [t1_acoes, t1_bcb, t1_world_bank, t5, t6]
 
-    t3 = DatabricksSubmitRunOperator(
-        task_id="t3_gold",
-        databricks_conn_id="databricks_default",
-        json=make_task("t3_gold", "jobs/job_gold.py")
-    )
+    # Bronze → Silver: cada fonte alimenta apenas sua própria transformação
+    t1_acoes      >> t2_acoes
+    t1_bcb        >> t2_bcb
+    t1_world_bank >> t2_world_bank
+    t6            >> t6_silver
 
-    t10 = DatabricksSubmitRunOperator(
-        task_id="t10_streaming_gold",
-        databricks_conn_id="databricks_default",
-        json=make_task("t10_streaming_gold", "jobs/job_streaming_to_gold.py")
-    )
+    # Silver → Gold: pipelines de mercado e clientes correm em paralelo
+    [t2_acoes, t2_bcb, t2_world_bank] >> t3   # mercado: anomalias, performance, fraude
+    t6_silver >> t7                             # clientes: posição, score risco, perfil, ordens
+    t7 >> t9                                   # SCD type-2 após gold.score_risco_clientes existir
 
-    t8 = DatabricksSubmitRunOperator(
-        task_id="t8_lakehouse_monitoring",
-        databricks_conn_id="databricks_default",
-        json=make_task("t8_lakehouse_monitoring", "jobs/job_lakehouse_monitoring.py")
-    )
+    # Streaming Gold precisa de silver.streaming (t5) E gold.performance_acoes (t3)
+    [t3, t5] >> t10
 
-    t4 = DatabricksSubmitRunOperator(
-        task_id="t4_observabilidade",
-        databricks_conn_id="databricks_default",
-        json=make_task("t4_observabilidade", "jobs/job_observabilidade.py")
-    )
-
-    t_sql = DatabricksSubmitRunOperator(
-        task_id="t_carga_sql",
-        databricks_conn_id="databricks_default",
-        json=make_task("t_carga_sql", "jobs/job_carga_sql.py")
-    )
-
-    # Dependências
-    t0 >> t1 >> [t5, t6]
-    t5 >> t2
-    t6 >> [t2, t7]
-    t7 >> t9
-    [t2, t9] >> t3
-    t3 >> t10
-    t10 >> [t8, t_sql]
+    # Finalização: monitora e carrega SQL após todos os Gold estarem prontos
+    [t3, t7, t9, t10] >> [t8, t_sql]
     [t8, t_sql] >> t4

@@ -122,7 +122,7 @@ def main():
     # fmt: off
     df_clientes_spark.write.format("delta").mode("overwrite") \
         .saveAsTable("case_santander.bronze.clientes")
-    print(f"✅ bronze.clientes → {df_clientes_spark.count()} registros")
+    print("✅ bronze.clientes gravado")
 
     # Gerar ordens simuladas
     acoes = ["PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA",
@@ -158,7 +158,7 @@ def main():
     df_ordens_spark = spark.createDataFrame(pd.DataFrame(ordens))
     df_ordens_spark.write.format("delta").mode("overwrite") \
         .saveAsTable("case_santander.bronze.ordens")
-    print(f"✅ bronze.ordens → {df_ordens_spark.count()} registros")
+    print("✅ bronze.ordens gravado")
 
     # Silver — clientes
     df_clientes_silver = spark.sql("SELECT * FROM case_santander.bronze.clientes") \
@@ -176,7 +176,7 @@ def main():
     df_clientes_silver.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.silver.clientes")
-    print(f"✅ silver.clientes → {df_clientes_silver.count()} registros")
+    print("✅ silver.clientes gravado")
 
     # Silver — ordens
     df_ordens_silver = spark.sql("SELECT * FROM case_santander.bronze.ordens") \
@@ -189,7 +189,7 @@ def main():
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.silver.ordens")
     # fmt: on
-    print(f"✅ silver.ordens → {df_ordens_silver.count()} registros")
+    print("✅ silver.ordens gravado")
 
     fim = datetime.now()
     print("\n=== JOB CLIENTES ORDENS CONCLUIDO ===")

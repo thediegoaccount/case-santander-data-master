@@ -89,8 +89,16 @@ src/
 
 jobs/
 ├── job_unity_catalog.py         # t0 — Registra tabelas; Liquid Clustering; Delta CDF
-├── job_extracao.py              # t1 — Orquestra todas as ingestões
-├── job_silver.py                # t2 — Orquestra todas as transformações Silver
+├── job_extracao_acoes.py        # t1_extracao_acoes — Ingestão de ações via Yahoo Finance
+├── job_extracao_bcb.py          # t1_extracao_bcb — Ingestão de indicadores do Banco Central
+├── job_extracao_world_bank.py   # t1_extracao_world_bank — Ingestão de dados do World Bank
+├── job_extracao.py              # t1 — Orquestra todas as ingestões (legado)
+├── job_clientes_ordens.py       # t6_clientes_ordens — Ingestão Kaggle + ordens simuladas
+├── job_clientes_silver.py       # t6_clientes_silver — Bronze → Silver de clientes/ordens
+├── job_silver_acoes.py          # t2_silver_acoes — Silver de Ações
+├── job_silver_bcb.py            # t2_silver_bcb — Silver de indicadores BCB
+├── job_silver_world_bank.py     # t2_silver_world_bank — Silver de World Bank
+├── job_silver.py                # t2 — Orquestra todas as transformações Silver (legado)
 ├── job_corretora_analises.py    # t7 — Posição, score de risco, fraude, SQL
 ├── job_scd.py                   # t9 — SCD Type 2 clientes e score risco
 ├── job_gold.py                  # t3 — Orquestra geração das tabelas Gold

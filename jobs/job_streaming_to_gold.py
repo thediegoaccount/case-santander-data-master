@@ -94,7 +94,7 @@ def main():
 
     # GOLD 3 — Volume intraday por ticker e hora
     total_vol = calcular_volume_intraday(spark)
-    print(f"✅ gold.volume_intraday → {total_vol} registros")
+    print("✅ gold.volume_intraday gravado")
 
     # GOLD 4 — Ranking de ativos em tempo real
     total_rank = calcular_ranking_realtime(spark)
