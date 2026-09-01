@@ -92,9 +92,8 @@ def detectar_fraude_streaming(spark: SparkSession) -> int:
         .saveAsTable("case_santander.gold.fraude_streaming")
     # fmt: on
 
-    total_critico = df_fraude.filter(F.col("score_fraude") == "Critico").count()
-    print(f"Gold fraude_streaming gravado: {df_fraude.count()} registros ({total_critico} criticos)")
-    return total_critico
+    print("Gold fraude_streaming gravado")
+    return 0  # Metrics available in Spark UI
 
 
 def detectar_anomalias_intraday(spark: SparkSession) -> int:
@@ -159,9 +158,8 @@ def detectar_anomalias_intraday(spark: SparkSession) -> int:
         .saveAsTable("case_santander.gold.anomalias_intraday")
     # fmt: on
 
-    total_anomalias = df_anomalias.filter(F.col("anomalia")).count()
-    print(f"Gold anomalias_intraday gravado: {df_anomalias.count()} registros ({total_anomalias} anomalias)")
-    return total_anomalias
+    print("Gold anomalias_intraday gravado")
+    return 0  # Metrics available in Spark UI
 
 
 def calcular_volume_intraday(spark: SparkSession) -> int:
@@ -232,9 +230,8 @@ def calcular_volume_intraday(spark: SparkSession) -> int:
         .saveAsTable("case_santander.gold.volume_intraday")
     # fmt: on
 
-    total = df_volume_intraday.count()
-    print(f"Gold volume_intraday gravado: {total} registros")
-    return total
+    print("Gold volume_intraday gravado")
+    return 0  # Metrics available in Spark UI
 
 
 def calcular_ranking_realtime(spark: SparkSession) -> int:
@@ -301,6 +298,5 @@ def calcular_ranking_realtime(spark: SparkSession) -> int:
         .saveAsTable("case_santander.gold.ranking_acoes_realtime")
     # fmt: on
 
-    total = df_ranking.count()
-    print(f"Gold ranking_acoes_realtime gravado: {total} registros")
-    return total
+    print("Gold ranking_acoes_realtime gravado")
+    return 0  # Metrics available in Spark UI

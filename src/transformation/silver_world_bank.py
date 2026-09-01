@@ -36,6 +36,5 @@ def transformar_world_bank(spark: SparkSession, storage_account: str) -> int:
         .save(silver_path)
     # fmt: on
 
-    total = df_silver.count()
-    print(f"Silver World Bank gravado: {total} registros")
-    return total
+    print("Silver World Bank gravado")
+    return 0  # Metrics in Spark UI

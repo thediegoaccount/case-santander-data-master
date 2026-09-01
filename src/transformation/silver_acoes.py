@@ -69,6 +69,5 @@ def transformar_acoes(spark: SparkSession, storage_account: str) -> int:
         .save(silver_path)
     # fmt: on
 
-    total = df_silver.count()
-    print(f"Silver acoes gravado: {total} registros")
-    return total
+    print("Silver acoes gravado")
+    return 0  # Metrics in Spark UI

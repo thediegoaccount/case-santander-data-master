@@ -7,26 +7,29 @@ Ou via Databricks Workflow:
 """
 
 import sys
+from src.config.environment import setup_python_path
 
-sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
+setup_python_path()
+from src.config.logging import info, error, warning
 
 from datetime import datetime
 
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
+from src.config.secrets import get_secret
 from pyspark.sql import functions as F
 
 
 def main():
     inicio = datetime.now()
-    print(f"=== JOB CORRETORA ANALISES INICIADO: {inicio} ===")
+    info("job_corretora_analises", f"=== JOB CORRETORA ANALISES INICIADO: {inicio} ===")
 
     spark = DatabricksSession.builder.getOrCreate()
-    sql_conn = dbutils.secrets.get(scope="kv-case-santander", key="sql-connection-string")
+    sql_conn = get_secret("sql-connection-string")
     data_hoje = datetime.now().strftime("%Y-%m-%d")
 
     # GOLD 1 — Posicao do cliente (carteira)
-    print("Calculando posicao dos clientes...")
+    info("job_corretora_analises", "Calculando posicao dos clientes...")
     df_ordens = spark.sql("SELECT * FROM case_santander.silver.ordens")
     # fmt: off
     df_clientes = spark.sql("""
@@ -61,10 +64,10 @@ def main():
     df_posicao.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.gold.posicao_clientes")
-    print("✅ gold.posicao_clientes gravado")
+    info("job_corretora_analises", " gold.posicao_clientes gravado")
 
     # GOLD 2 — Score de risco
-    print("Calculando score de risco...")
+    info("job_corretora_analises", "Calculando score de risco...")
     df_score = df_posicao \
         .groupBy("hash_cliente", "perfil_risco", "faixa_saldo", "score_credito") \
         .agg(
@@ -114,7 +117,7 @@ def main():
     df_score.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.gold.score_risco_clientes")
-    print("✅ gold.score_risco_clientes gravado")
+    info("job_corretora_analises", " gold.score_risco_clientes gravado")
 
     # GOLD 3 — Perfil clientes
     df_perfil = spark.sql("""
@@ -133,7 +136,7 @@ def main():
     df_perfil.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.gold.perfil_clientes")
-    print("✅ gold.perfil_clientes gravado")
+    info("job_corretora_analises", " gold.perfil_clientes gravado")
 
     # GOLD 4 — Ordens consolidadas
     df_ordens_gold = spark.sql("""
@@ -149,7 +152,7 @@ def main():
     df_ordens_gold.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.gold.ordens_consolidadas")
-    print("✅ gold.ordens_consolidadas gravado")
+    info("job_corretora_analises", " gold.ordens_consolidadas gravado")
 
     # GOLD 5 — Ranking acoes por perfil
     df_ranking = spark.sql("""
@@ -165,10 +168,10 @@ def main():
     df_ranking.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
         .saveAsTable("case_santander.gold.ranking_acoes_perfil")
-    print("✅ gold.ranking_acoes_perfil gravado")
+    info("job_corretora_analises", " gold.ranking_acoes_perfil gravado")
 
     # Carga SQL Database
-    print("Carregando no SQL Database...")
+    info("job_corretora_analises", "Carregando no SQL Database...")
     tabelas_sql = [
         ("case_santander.gold.perfil_clientes",    "dbo.perfil_clientes"),
         ("case_santander.gold.ordens_consolidadas","dbo.ordens_consolidadas"),
@@ -185,14 +188,14 @@ def main():
                 .option("dbtable", tabela_sql) \
                 .option("driver", "com.microsoft.sqlserver.jdbc.SQLServerDriver") \
                 .mode("overwrite").save()
-            print(f"  ✅ {tabela_sql} carregado")
+            info("job_corretora_analises", f"   {tabela_sql} carregado")
         except Exception as e:
-            print(f"  ❌ {tabela_sql} → {e}")
+            info("job_corretora_analises", f"   {tabela_sql} → {e}")
     # fmt: on
 
     fim = datetime.now()
-    print("\n=== JOB CORRETORA ANALISES CONCLUIDO ===")
-    print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
+    info("job_corretora_analises", "\n=== JOB CORRETORA ANALISES CONCLUIDO ===")
+    info("job_corretora_analises", f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
 
 main()

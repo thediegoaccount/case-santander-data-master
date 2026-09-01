@@ -8,10 +8,21 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    # Configuração de Ambiente (HK ou PROD)
+    ENVIRONMENT: ${ENVIRONMENT:-hk}
+    CONFIRM_PRODUCTION: ${CONFIRM_PRODUCTION:-false}
+    # Databricks
     DATABRICKS_HOST: ${DATABRICKS_HOST}
     DATABRICKS_TOKEN: ${DATABRICKS_TOKEN}
+    DATABRICKS_CLUSTER_ID: ${DATABRICKS_CLUSTER_ID}
+    DATABRICKS_REPO_PATH: ${DATABRICKS_REPO_PATH:-/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master}
+    # Azure Resources (se necessário para jobs locais)
+    STORAGE_ACCOUNT: ${STORAGE_ACCOUNT}
+    KEY_VAULT: ${KEY_VAULT}
   volumes:
     - ../dags:/opt/airflow/dags
+    - ../src:/opt/airflow/src
+    - ../jobs:/opt/airflow/jobs
     - airflow-logs:/opt/airflow/logs
   depends_on:
     postgres:
@@ -30,6 +41,8 @@ services:
       retries: 5
     volumes:
       - postgres-db:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
 
   airflow-webserver:
     <<: *airflow-common
@@ -42,15 +55,33 @@ services:
     command: scheduler
 
   airflow-init:
-      <<: *airflow-common
-      command: >
-        bash -c "airflow db migrate && airflow users create 
-        --username admin 
-        --firstname Admin --lastname User 
-        --role Admin 
-        --email admin@santander.com 
-        --password admin"
+    <<: *airflow-common
+    command: >
+      bash -c "airflow db migrate && airflow users create
+      --username admin
+      --firstname Admin --lastname User
+      --role Admin
+      --email admin@santander.com
+      --password admin"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: santander-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-postgres-datasource
+      GF_SERVER_ROOT_URL: http://localhost:3000
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - postgres
+    restart: unless-stopped
 
 volumes:
   postgres-db:
   airflow-logs:
+  grafana-data:

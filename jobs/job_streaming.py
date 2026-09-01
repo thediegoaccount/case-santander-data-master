@@ -7,13 +7,16 @@ Ou via Databricks Workflow:
 """
 
 import sys
+from src.config.environment import setup_python_path
 
-sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
+setup_python_path()
+from src.config.logging import info, error, warning
 
 from datetime import datetime
 
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
+from src.config.secrets import get_secret
 from pyspark.sql import functions as F
 from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType
 
@@ -22,14 +25,14 @@ from src.config.settings import configure_adls
 
 def main():
     inicio = datetime.now()
-    print(f"=== JOB STREAMING INICIADO: {inicio} ===")
+    info("job_streaming", f"=== JOB STREAMING INICIADO: {inicio} ===")
 
     spark = DatabricksSession.builder.getOrCreate()
 
-    client_id = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
-    tenant_id = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
-    client_secret = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
-    storage_account = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
+    client_id = get_secret("client-id")
+    tenant_id = get_secret("tenant-id")
+    client_secret = get_secret("client-secret")
+    storage_account = get_secret("storage-account")
 
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
 
@@ -40,7 +43,7 @@ def main():
     # Parar todos os streams ativos antes de iniciar
     for stream in spark.streams.active:
         stream.stop()
-        print(f"Stream anterior parado: {stream.name}")
+        info("job_streaming", f"Stream anterior parado: {stream.name}")
 
     # fmt: off
     schema_transacao = StructType([
@@ -95,7 +98,7 @@ def main():
         .start(silver_streaming_path)
 
     query.awaitTermination()
-    print("✅ Streaming processado!")
+    info("job_streaming", " Streaming processado!")
 
     # Registrar no Unity Catalog
     spark.sql("DROP TABLE IF EXISTS case_santander.silver.streaming")
@@ -107,11 +110,11 @@ def main():
         .saveAsTable("case_santander.silver.streaming")
     # fmt: on
 
-    print("✅ case_santander.silver.streaming gravado")
+    info("job_streaming", " case_santander.silver.streaming gravado")
 
     fim = datetime.now()
-    print("\n=== JOB STREAMING CONCLUIDO ===")
-    print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
+    info("job_streaming", "\n=== JOB STREAMING CONCLUIDO ===")
+    info("job_streaming", f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
 
 if __name__ == "__main__":

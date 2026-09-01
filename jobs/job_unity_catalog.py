@@ -3,27 +3,30 @@ Job: Unity Catalog — Bronze
 """
 
 import sys
+from src.config.environment import setup_python_path
 
-sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
+setup_python_path()
+from src.config.logging import info, error, warning
 
 from datetime import datetime
 
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
+from src.config.secrets import get_secret
 
 from src.config.settings import configure_adls
 
 
 def main():
     inicio = datetime.now()
-    print(f"=== JOB UNITY CATALOG INICIADO: {inicio} ===")
+    info("job_unity_catalog", f"=== JOB UNITY CATALOG INICIADO: {inicio} ===")
 
     spark = DatabricksSession.builder.getOrCreate()
 
-    client_id = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
-    tenant_id = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
-    client_secret = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
-    storage_account = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
+    client_id = get_secret("client-id")
+    tenant_id = get_secret("tenant-id")
+    client_secret = get_secret("client-secret")
+    storage_account = get_secret("storage-account")
 
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
     spark.sql("SET spark.databricks.delta.schema.autoMerge.enabled = true")
@@ -31,7 +34,7 @@ def main():
     spark.sql("CREATE SCHEMA IF NOT EXISTS case_santander.bronze")
     spark.sql("CREATE SCHEMA IF NOT EXISTS case_santander.silver")
     spark.sql("CREATE SCHEMA IF NOT EXISTS case_santander.gold")
-    print("✅ Schemas verificados!")
+    info("job_unity_catalog", " Schemas verificados!")
 
     # Tabelas Bronze em formato Parquet
     # fmt: off
@@ -63,9 +66,9 @@ def main():
                 .option("mergeSchema", "true") \
                 .saveAsTable(f"case_santander.bronze.{tabela}")
             # fmt: on
-            print(f"  ✅ case_santander.bronze.{tabela} gravado")
+            info("job_unity_catalog", f"   case_santander.bronze.{tabela} gravado")
         except Exception as e:
-            print(f"  ⚠️ case_santander.bronze.{tabela} → {e}")
+            info("job_unity_catalog", f"   case_santander.bronze.{tabela} → {e}")
 
     # for tabela, path in tabelas_bronze_delta.items():
     #    try:
@@ -79,9 +82,9 @@ def main():
     #            .saveAsTable(f"case_santander.bronze.{tabela}")
     #        # fmt: on
     #        count = spark.sql(f"SELECT COUNT(*) as total FROM case_santander.bronze.{tabela}").collect()[0]["total"]
-    #        print(f"  ✅ case_santander.bronze.{tabela} → {count} registros")
+    #        info("job_unity_catalog", f"   case_santander.bronze.{tabela} → {count} registros")
     #    except Exception as e:
-    #        print(f"  ⚠️ case_santander.bronze.{tabela} → {e}")
+    #        info("job_unity_catalog", f"   case_santander.bronze.{tabela} → {e}")
     # clientes e ordens são criados posteriormente por job_clientes_ordens.py
 
     # como tabelas gerenciadas no Unity Catalog, sem leitura de paths ADLS aqui.
@@ -106,14 +109,14 @@ def main():
                 .option("mergeSchema", "true") \
                 .saveAsTable(f"case_santander.gold.{tabela}")
             # fmt: on
-            print(f"  ✅ case_santander.gold.{tabela} gravado")
+            info("job_unity_catalog", f"   case_santander.gold.{tabela} gravado")
         except Exception as e:
-            print(f"  ⚠️ case_santander.gold.{tabela} → {e}")
+            info("job_unity_catalog", f"   case_santander.gold.{tabela} → {e}")
 
     # Liquid Clustering: substitui particionamento estático por clustering
     # dinâmico — o Databricks decide o layout ideal dos arquivos por coluna,
     # sem necessidade de reescrever a tabela ao mudar a estratégia.
-    print("\nAplicando Liquid Clustering...")
+    info("job_unity_catalog", "\nAplicando Liquid Clustering...")
     # fmt: off
     tabelas_liquid = {
         "case_santander.silver.acoes":              "ticker, ano, mes",
@@ -129,14 +132,14 @@ def main():
     for tabela, cols in tabelas_liquid.items():
         try:
             spark.sql(f"ALTER TABLE {tabela} CLUSTER BY ({cols})")
-            print(f"  ✅ Liquid Clustering: {tabela} → ({cols})")
+            info("job_unity_catalog", f"   Liquid Clustering: {tabela} → ({cols})")
         except Exception as e:
-            print(f"  ⚠️ {tabela}: {e}")
+            info("job_unity_catalog", f"   {tabela}: {e}")
 
     # Delta Change Data Feed (CDC): habilita rastreamento de mudanças
     # a nível de linha (insert/update/delete) nas tabelas Silver críticas.
     # Permite leitura incremental por versão ou timestamp nos jobs Gold.
-    print("\nHabilitando Delta Change Data Feed (CDC)...")
+    info("job_unity_catalog", "\nHabilitando Delta Change Data Feed (CDC)...")
     tabelas_cdf = [
         "case_santander.silver.streaming",
         "case_santander.silver.ordens",
@@ -151,13 +154,13 @@ def main():
                 SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
             """)
             # fmt: on
-            print(f"  ✅ CDF habilitado: {tabela}")
+            info("job_unity_catalog", f"   CDF habilitado: {tabela}")
         except Exception as e:
-            print(f"  ⚠️ {tabela}: {e}")
+            info("job_unity_catalog", f"   {tabela}: {e}")
 
     fim = datetime.now()
-    print("\n=== JOB UNITY CATALOG CONCLUIDO ===")
-    print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
+    info("job_unity_catalog", "\n=== JOB UNITY CATALOG CONCLUIDO ===")
+    info("job_unity_catalog", f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
 
 if __name__ == "__main__":

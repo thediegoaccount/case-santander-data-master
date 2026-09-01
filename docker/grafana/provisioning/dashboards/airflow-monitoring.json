@@ -1,0 +1,47 @@
+{
+  "dashboard": {
+    "title": "Airflow Pipeline Monitoring",
+    "panels": [
+      {
+        "title": "DAG Status (Last 24h)",
+        "type": "stat",
+        "targets": [
+          {
+            "query": "SELECT COUNT(*) FROM dag_run WHERE execution_date >= NOW() - INTERVAL '24 hours' AND state = 'success'",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "title": "Failed DAGs (Last 24h)",
+        "type": "stat",
+        "targets": [
+          {
+            "query": "SELECT COUNT(*) FROM dag_run WHERE execution_date >= NOW() - INTERVAL '24 hours' AND state = 'failed'",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "title": "DAG Duration (Minutes)",
+        "type": "graph",
+        "targets": [
+          {
+            "query": "SELECT dag_id, AVG(EXTRACT(EPOCH FROM (end_date - start_date))) / 60 as avg_duration FROM dag_run WHERE execution_date >= NOW() - INTERVAL '24 hours' GROUP BY dag_id",
+            "refId": "C"
+          }
+        ]
+      },
+      {
+        "title": "Task Failures (Last 24h)",
+        "type": "table",
+        "targets": [
+          {
+            "query": "SELECT task_id, COUNT(*) as failures FROM task_instance WHERE state = 'failed' AND execution_date >= NOW() - INTERVAL '24 hours' GROUP BY task_id ORDER BY failures DESC LIMIT 10",
+            "refId": "D"
+          }
+        ]
+      }
+    ]
+  }
+}

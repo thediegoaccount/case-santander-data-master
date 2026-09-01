@@ -1,0 +1,67 @@
+{
+  "dashboard": {
+    "title": "Santander Pipeline Overview",
+    "panels": [
+      {
+        "title": "Pipeline Execution Status",
+        "type": "stat",
+        "targets": [
+          {
+            "query": "SELECT state, COUNT(*) as count FROM dag_run WHERE dag_id = 'pipeline_corretora_santander' AND execution_date >= NOW() - INTERVAL '24 hours' GROUP BY state",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "title": "Pipeline Duration (Minutes)",
+        "type": "graph",
+        "targets": [
+          {
+            "query": "SELECT execution_date, EXTRACT(EPOCH FROM (end_date - start_date)) / 60 as duration_minutes FROM dag_run WHERE dag_id = 'pipeline_corretora_santander' AND execution_date >= NOW() - INTERVAL '7 days' ORDER BY execution_date DESC",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "title": "Pipeline Success Rate (Last 7d)",
+        "type": "gauge",
+        "targets": [
+          {
+            "query": "SELECT ROUND(100.0 * SUM(CASE WHEN state = 'success' THEN 1 ELSE 0 END) / COUNT(*), 2) as success_rate FROM dag_run WHERE dag_id = 'pipeline_corretora_santander' AND execution_date >= NOW() - INTERVAL '7 days'",
+            "refId": "C"
+          }
+        ]
+      },
+      {
+        "title": "Tasks by Layer (Last Run)",
+        "type": "piechart",
+        "targets": [
+          {
+            "query": "SELECT CASE WHEN task_id LIKE 't0_%' THEN 'Setup' WHEN task_id LIKE 't1_%' THEN 'Ingestion' WHEN task_id LIKE 't2_%' THEN 'Silver' WHEN task_id LIKE 't3_%' THEN 'Gold' WHEN task_id LIKE 't_sql_%' THEN 'SQL' ELSE 'Other' END as layer, COUNT(*) as count FROM task_instance WHERE dag_id = 'pipeline_corretora_santander' AND execution_date = (SELECT MAX(execution_date) FROM dag_run WHERE dag_id = 'pipeline_corretora_santander') GROUP BY layer",
+            "refId": "D"
+          }
+        ]
+      },
+      {
+        "title": "Failed Tasks by Layer (Last 7d)",
+        "type": "table",
+        "targets": [
+          {
+            "query": "SELECT CASE WHEN task_id LIKE 't0_%' THEN 'Setup' WHEN task_id LIKE 't1_%' THEN 'Ingestion' WHEN task_id LIKE 't2_%' THEN 'Silver' WHEN task_id LIKE 't3_%' THEN 'Gold' WHEN task_id LIKE 't_sql_%' THEN 'SQL' ELSE 'Other' END as layer, task_id, COUNT(*) as failures FROM task_instance WHERE dag_id = 'pipeline_corretora_santander' AND state = 'failed' AND execution_date >= NOW() - INTERVAL '7 days' GROUP BY layer, task_id ORDER BY failures DESC LIMIT 10",
+            "refId": "E"
+          }
+        ]
+      },
+      {
+        "title": "Pipeline Runs per Day (Last 30d)",
+        "type": "bar",
+        "targets": [
+          {
+            "query": "SELECT DATE(execution_date) as date, COUNT(*) as runs FROM dag_run WHERE dag_id = 'pipeline_corretora_santander' AND execution_date >= NOW() - INTERVAL '30 days' GROUP BY date ORDER BY date",
+            "refId": "F"
+          }
+        ]
+      }
+    ]
+  }
+}

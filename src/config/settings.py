@@ -56,13 +56,15 @@ def get_spark():
 
 
 def get_credentials(dbutils):
-    """Busca credenciais do Key Vault via dbutils.secrets"""
+    """Busca credenciais do Key Vault via get_secret (dinâmico)"""
+    from .secrets import get_secret
+    
     return {
-        "client_id": dbutils.secrets.get(scope="kv-case-santander", key="client-id"),
-        "tenant_id": dbutils.secrets.get(scope="kv-case-santander", key="tenant-id"),
-        "client_secret": dbutils.secrets.get(scope="kv-case-santander", key="client-secret"),
-        "storage_account": dbutils.secrets.get(scope="kv-case-santander", key="storage-account"),
-        "sql_conn": dbutils.secrets.get(scope="kv-case-santander", key="sql-connection-string"),
-        "kaggle_username": dbutils.secrets.get(scope="kv-case-santander", key="kaggle-username"),
-        "kaggle_key": dbutils.secrets.get(scope="kv-case-santander", key="kaggle-key"),
+        "client_id": get_secret("client-id"),
+        "tenant_id": get_secret("tenant-id"),
+        "client_secret": get_secret("client-secret"),
+        "storage_account": get_secret("storage-account"),
+        "sql_conn": get_secret("sql-connection-string"),
+        "kaggle_username": get_secret("kaggle-username"),
+        "kaggle_key": get_secret("kaggle-key"),
     }

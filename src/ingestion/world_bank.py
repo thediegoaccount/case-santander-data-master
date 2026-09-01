@@ -37,7 +37,7 @@ def extrair_world_bank(spark, storage_account: str) -> int:
     dfs = [df for df in [df_pib, df_desemprego] if not df.empty]
 
     if not dfs:
-        print("⚠️ World Bank sem dados disponíveis — pulando extração")
+        print(" World Bank sem dados disponíveis — pulando extração")
         return 0
 
     df_wb = pd.concat(dfs, ignore_index=True)
@@ -46,6 +46,5 @@ def extrair_world_bank(spark, storage_account: str) -> int:
     df_spark = spark.createDataFrame(df_wb)
     df_spark.write.mode("overwrite").parquet(bronze_path)
 
-    total = df_spark.count()
-    print(f"Bronze World Bank gravado: {total} registros")
-    return total
+    print("Bronze World Bank gravado")
+    return 0  # Metrics in Spark UI

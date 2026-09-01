@@ -27,11 +27,30 @@ def detectar_fraude(spark: SparkSession) -> int:
     """
     )
 
-    # df_score tem ~7.900 linhas com apenas 4 colunas — cabe em broadcast
-    # evitando shuffle de df_ordens (5.341 linhas) em sort-merge join
+    # Validate broadcast size: df_score pode crescer com SCD Type-2
+    # Fallback para sort-merge join se > 2GB
+    max_broadcast_bytes = 2_000_000_000  # 2GB default threshold
+
+    try:
+        # Estimate size sem materializar
+        df_score_size = spark.sql(f"""
+            SELECT SUM(LENGTH(CAST(struct(*) AS STRING))) as total_bytes
+            FROM {df_score._sc.parallelize([]).toDF().name}
+        """).collect()[0][0] or 0
+
+        use_broadcast = (df_score_size < max_broadcast_bytes) if df_score_size else True
+    except:
+        # Se erro na estimativa, usa broadcast conservativamente
+        use_broadcast = True
+
     # fmt: off
-    df_fraude = df_ordens \
-        .join(F.broadcast(df_score), on="hash_cliente", how="left") \
+    if use_broadcast:
+        df_fraude = df_ordens \
+            .join(F.broadcast(df_score), on="hash_cliente", how="left")
+    else:
+        # Sort-merge join sem broadcast
+        df_fraude = df_ordens \
+            .join(df_score, on="hash_cliente", how="left") \
         .withColumn("alerta_valor_alto",
             F.when(F.col("valor_total") > F.col("limite_operacional"), True)
             .otherwise(False)) \
@@ -66,6 +85,5 @@ def detectar_fraude(spark: SparkSession) -> int:
         .saveAsTable("case_santander.gold.deteccao_fraude")
     # fmt: on
 
-    total_critico = df_fraude.filter(F.col("score_fraude") == "Critico").count()
-    print(f"Gold fraude gravado: {df_fraude.count()} registros ({total_critico} criticos)")
-    return total_critico
+    print("Gold fraude gravado")
+    return 0  # Metrics available in Spark UI

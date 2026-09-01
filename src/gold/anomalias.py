@@ -45,6 +45,5 @@ def detectar_anomalias(spark: SparkSession, storage_account: str) -> int:
         .save(gold_path)
     # fmt: on
 
-    total = df_anomalias.filter(F.col("anomalia")).count()
-    print(f"Gold anomalias gravado: {df_anomalias.count()} registros ({total} anomalias)")
-    return total
+    print("Gold anomalias gravado")
+    return 0  # Metrics available in Spark UI

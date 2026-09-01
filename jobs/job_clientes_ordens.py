@@ -7,10 +7,11 @@ Ou via Databricks Workflow:
 """
 
 import sys
+from src.config.environment import setup_python_path
 
-sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
+setup_python_path()
+from src.config.logging import info, error, warning
 
-import hashlib
 import os
 import random
 import zipfile
@@ -20,17 +21,28 @@ import pandas as pd
 import requests
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
+from src.config.secrets import get_secret
 from pyspark.sql import functions as F
+from delta.tables import DeltaTable
 
 from src.config.settings import configure_adls
+from src.security.hashing import hash_with_salt, hash_customer_id, hash_surname
 
 
 def hash_id(valor):
-    return hashlib.sha256(str(valor).encode()).hexdigest()[:16]
+    """
+    Mascara CustomerId usando SHA256 + salt (one-way hash)
+    Usa salt do Key Vault para evitar reconstituição
+    """
+    return hash_customer_id(str(valor))
 
 
 def mascarar_sobrenome(sobrenome):
-    return sobrenome[0] + "*" * (len(sobrenome) - 1)
+    """
+    Mascara sobrenome usando SHA256 + salt (one-way hash)
+    Não é possível reverter mesmo com acesso ao salt
+    """
+    return hash_surname(str(sobrenome))
 
 
 def classificar_perfil(score):
@@ -55,16 +67,16 @@ def classificar_saldo(balance):
 
 def main():
     inicio = datetime.now()
-    print(f"=== JOB CLIENTES ORDENS INICIADO: {inicio} ===")
+    info("job_clientes_ordens", f"=== JOB CLIENTES ORDENS INICIADO: {inicio} ===")
 
     spark = DatabricksSession.builder.getOrCreate()
 
-    client_id = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
-    tenant_id = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
-    client_secret = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
-    storage_account = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
-    kaggle_username = dbutils.secrets.get(scope="kv-case-santander", key="kaggle-username")
-    kaggle_key = dbutils.secrets.get(scope="kv-case-santander", key="kaggle-key")
+    client_id = get_secret("client-id")
+    tenant_id = get_secret("tenant-id")
+    client_secret = get_secret("client-secret")
+    storage_account = get_secret("storage-account")
+    kaggle_username = get_secret("kaggle-username")
+    kaggle_key = get_secret("kaggle-key")
 
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
 
@@ -86,7 +98,7 @@ def main():
         z.extractall(work_dir)
 
     csv_path = f"{work_dir}/churn.csv"
-    print(f"✅ Dataset Kaggle baixado: {csv_path}")
+    info("job_clientes_ordens", f" Dataset Kaggle baixado: {csv_path}")
 
     # Processar clientes com LGPD
     df_raw = pd.read_csv(csv_path)
@@ -117,12 +129,33 @@ def main():
     })
     # fmt: on
 
-    # Gravar clientes no Bronze
+    # Gravar clientes no Bronze com CDC (MERGE)
     df_clientes_spark = spark.createDataFrame(df_clientes_final)
-    # fmt: off
-    df_clientes_spark.write.format("delta").mode("overwrite") \
-        .saveAsTable("case_santander.bronze.clientes")
-    print("✅ bronze.clientes gravado")
+    tabela_clientes_bronze = "case_santander.bronze.clientes"
+    
+    try:
+        # Tentar MERGE para CDC (apenas mudanças)
+        delta_table = DeltaTable.forName(spark, tabela_clientes_bronze)
+        
+        delta_table.alias("target") \
+            .merge(
+                df_clientes_spark.alias("source"),
+                "target.hash_cliente = source.hash_cliente"
+            ) \
+            .whenMatchedUpdateAll() \
+            .whenNotMatchedInsertAll() \
+            .execute()
+        
+        info("job_clientes_ordens", "[OK] bronze.clientes atualizado via MERGE (CDC)")
+        
+    except Exception as e:
+        if "is not a Delta table" in str(e) or "Table or view not found" in str(e):
+            # Primeira carga
+            df_clientes_spark.write.format("delta").mode("overwrite") \
+                .saveAsTable(tabela_clientes_bronze)
+            info("job_clientes_ordens", "[OK] bronze.clientes primeira carga")
+        else:
+            raise e
 
     # Gerar ordens simuladas
     acoes = ["PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA",
@@ -130,6 +163,7 @@ def main():
 
     clientes_amostra = df_clientes_final.sample(1000).to_dict("records")
     ordens = []
+    ordem_counter = 0
 
     for cliente in clientes_amostra:
         num_ordens = random.randint(1, 10)
@@ -138,9 +172,13 @@ def main():
             preco = round(random.uniform(10, 100), 2)
             qtd = random.randint(100, 10000)
             data_ord = datetime(2024, 1, 1) + timedelta(days=random.randint(0, 457))
+            
+            # ID determinístico baseado em hash_cliente + timestamp
+            ordem_counter += 1
+            id_ordem = f"ORD{cliente['hash_cliente']}-{data_ord.strftime('%Y%m%d')}-{ordem_counter:04d}"
 
             ordens.append({
-                "id_ordem":      f"ORD{random.randint(1000000, 9999999)}",
+                "id_ordem":      id_ordem,
                 "hash_cliente":  cliente["hash_cliente"],
                 "perfil_risco":  cliente["perfil_risco"],
                 "faixa_saldo":   cliente["faixa_saldo"],
@@ -156,11 +194,33 @@ def main():
             })
 
     df_ordens_spark = spark.createDataFrame(pd.DataFrame(ordens))
-    df_ordens_spark.write.format("delta").mode("overwrite") \
-        .saveAsTable("case_santander.bronze.ordens")
-    print("✅ bronze.ordens gravado")
+    tabela_ordens_bronze = "case_santander.bronze.ordens"
+    
+    try:
+        # Tentar MERGE para CDC (apenas mudanças)
+        delta_table = DeltaTable.forName(spark, tabela_ordens_bronze)
+        
+        delta_table.alias("target") \
+            .merge(
+                df_ordens_spark.alias("source"),
+                "target.id_ordem = source.id_ordem"
+            ) \
+            .whenMatchedUpdateAll() \
+            .whenNotMatchedInsertAll() \
+            .execute()
+        
+        info("job_clientes_ordens", "[OK] bronze.ordens atualizado via MERGE (CDC)")
+        
+    except Exception as e:
+        if "is not a Delta table" in str(e) or "Table or view not found" in str(e):
+            # Primeira carga
+            df_ordens_spark.write.format("delta").mode("overwrite") \
+                .saveAsTable(tabela_ordens_bronze)
+            info("job_clientes_ordens", "[OK] bronze.ordens primeira carga")
+        else:
+            raise e
 
-    # Silver — clientes
+    # Silver — clientes com CDC (MERGE)
     df_clientes_silver = spark.sql("SELECT * FROM case_santander.bronze.clientes") \
         .withColumn("faixa_etaria",
             F.when(F.col("idade") < 30, "Jovem")
@@ -172,28 +232,74 @@ def main():
             .when(F.col("score_credito") >= 550, "Regular")
             .otherwise("Ruim")) \
         .withColumn("data_processamento", F.lit(data_hoje))
+    
+    tabela_clientes_silver = "case_santander.silver.clientes"
+    
+    try:
+        # Tentar MERGE para CDC (apenas mudanças)
+        delta_table = DeltaTable.forName(spark, tabela_clientes_silver)
+        
+        delta_table.alias("target") \
+            .merge(
+                df_clientes_silver.alias("source"),
+                "target.hash_cliente = source.hash_cliente"
+            ) \
+            .whenMatchedUpdateAll() \
+            .whenNotMatchedInsertAll() \
+            .execute()
+        
+        info("job_clientes_ordens", "[OK] silver.clientes atualizado via MERGE (CDC)")
+        
+    except Exception as e:
+        if "is not a Delta table" in str(e) or "Table or view not found" in str(e):
+            # Primeira carga
+            df_clientes_silver.write.format("delta").mode("overwrite") \
+                .option("mergeSchema", "true") \
+                .saveAsTable(tabela_clientes_silver)
+            info("job_clientes_ordens", "[OK] silver.clientes primeira carga")
+        else:
+            raise e
 
-    df_clientes_silver.write.format("delta").mode("overwrite") \
-        .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.silver.clientes")
-    print("✅ silver.clientes gravado")
-
-    # Silver — ordens
+    # Silver — ordens com CDC (MERGE)
     df_ordens_silver = spark.sql("SELECT * FROM case_santander.bronze.ordens") \
         .withColumn("data_ordem", F.to_date("data_ordem")) \
         .withColumn("ano",        F.year("data_ordem")) \
         .withColumn("mes",        F.month("data_ordem")) \
         .withColumn("data_processamento", F.lit(data_hoje))
-
-    df_ordens_silver.write.format("delta").mode("overwrite") \
-        .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.silver.ordens")
-    # fmt: on
-    print("✅ silver.ordens gravado")
+    
+    tabela_ordens_silver = "case_santander.silver.ordens"
+    
+    try:
+        # Tentar MERGE para CDC (apenas mudanças)
+        delta_table = DeltaTable.forName(spark, tabela_ordens_silver)
+        
+        delta_table.alias("target") \
+            .merge(
+                df_ordens_silver.alias("source"),
+                "target.id_ordem = source.id_ordem"
+            ) \
+            .whenMatchedUpdateAll() \
+            .whenNotMatchedInsertAll() \
+            .execute()
+        
+        info("job_clientes_ordens", "[OK] silver.ordens atualizado via MERGE (CDC)")
+        
+    except Exception as e:
+        if "is not a Delta table" in str(e) or "Table or view not found" in str(e):
+            # Primeira carga
+            df_ordens_silver.write.format("delta").mode("overwrite") \
+                .option("mergeSchema", "true") \
+                .saveAsTable(tabela_ordens_silver)
+            info("job_clientes_ordens", "[OK] silver.ordens primeira carga")
+        else:
+            raise e
 
     fim = datetime.now()
-    print("\n=== JOB CLIENTES ORDENS CONCLUIDO ===")
-    print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
+    info("job_clientes_ordens", "\n=== JOB CLIENTES ORDENS CONCLUIDO ===")
+    info("job_clientes_ordens", f"Duracao: {(fim - inicio).total_seconds():.2f}s")
+    info("job_clientes_ordens", f"Total clientes: {len(df_clientes_final)}")
+    info("job_clientes_ordens", f"Total ordens geradas: {len(ordens)}")
+    info("job_clientes_ordens", " CDC implementado: MERGE para clientes e ordens")
 
 
 main()

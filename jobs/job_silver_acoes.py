@@ -3,13 +3,16 @@ Job: Silver Ações
 """
 
 import sys
+from src.config.environment import setup_python_path
 
-sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
+setup_python_path()
+from src.config.logging import info, error, warning
 
 from datetime import datetime
 
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
+from src.config.secrets import get_secret
 
 from src.config.settings import configure_adls
 from src.transformation.silver_acoes import transformar_acoes
@@ -17,23 +20,23 @@ from src.transformation.silver_acoes import transformar_acoes
 
 def main():
     inicio = datetime.now()
-    print(f"=== JOB SILVER_ACOES INICIADO: {inicio} ===")
+    info("job_silver_acoes", f"=== JOB SILVER_ACOES INICIADO: {inicio} ===")
 
     spark = DatabricksSession.builder.getOrCreate()
 
-    client_id = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
-    tenant_id = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
-    client_secret = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
-    storage_account = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
+    client_id = get_secret("client-id")
+    tenant_id = get_secret("tenant-id")
+    client_secret = get_secret("client-secret")
+    storage_account = get_secret("storage-account")
 
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
 
     total_acoes = transformar_acoes(spark, storage_account)
 
     fim = datetime.now()
-    print("\n=== JOB SILVER_ACOES CONCLUIDO ===")
-    print("Acoes gravadas")
-    print(f"Duracao:    {(fim - inicio).total_seconds():.2f}s")
+    info("job_silver_acoes", "\n=== JOB SILVER_ACOES CONCLUIDO ===")
+    info("job_silver_acoes", "Acoes gravadas")
+    info("job_silver_acoes", f"Duracao:    {(fim - inicio).total_seconds():.2f}s")
 
 
 main()

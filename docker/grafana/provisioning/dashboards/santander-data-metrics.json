@@ -1,0 +1,77 @@
+{
+  "dashboard": {
+    "title": "Santander Data Metrics",
+    "panels": [
+      {
+        "title": "Ingestion Sources - Success Rate (Last 24h)",
+        "type": "gauge",
+        "targets": [
+          {
+            "query": "SELECT ROUND(100.0 * SUM(CASE WHEN state = 'success' THEN 1 ELSE 0 END) / COUNT(*), 2) as success_rate FROM task_instance WHERE task_id LIKE 't1_extracao_%' AND execution_date >= NOW() - INTERVAL '24 hours'",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "title": "Ingestion Sources - Last Run Duration",
+        "type": "bar",
+        "targets": [
+          {
+            "query": "SELECT task_id, EXTRACT(EPOCH FROM (end_date - start_date)) / 60 as duration_minutes FROM task_instance WHERE task_id LIKE 't1_extracao_%' AND execution_date = (SELECT MAX(execution_date) FROM task_instance WHERE task_id LIKE 't1_extracao_%') ORDER BY duration_minutes DESC",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "title": "Silver Transformations - Success Rate (Last 24h)",
+        "type": "gauge",
+        "targets": [
+          {
+            "query": "SELECT ROUND(100.0 * SUM(CASE WHEN state = 'success' THEN 1 ELSE 0 END) / COUNT(*), 2) as success_rate FROM task_instance WHERE task_id LIKE 't2_silver_%' AND execution_date >= NOW() - INTERVAL '24 hours'",
+            "refId": "C"
+          }
+        ]
+      },
+      {
+        "title": "Gold Analytics - Success Rate (Last 24h)",
+        "type": "gauge",
+        "targets": [
+          {
+            "query": "SELECT ROUND(100.0 * SUM(CASE WHEN state = 'success' THEN 1 ELSE 0 END) / COUNT(*), 2) as success_rate FROM task_instance WHERE task_id LIKE 't3_gold_%' AND execution_date >= NOW() - INTERVAL '24 hours'",
+            "refId": "D"
+          }
+        ]
+      },
+      {
+        "title": "Data Quality - Row Counts by Layer (Last Run)",
+        "type": "table",
+        "targets": [
+          {
+            "query": "SELECT CASE WHEN task_id LIKE 't1_%' THEN 'Bronze' WHEN task_id LIKE 't2_%' THEN 'Silver' WHEN task_id LIKE 't3_%' THEN 'Gold' ELSE 'Other' END as layer, COUNT(*) as tasks_processed FROM task_instance WHERE dag_id = 'pipeline_corretora_santander' AND execution_date = (SELECT MAX(execution_date) FROM dag_run WHERE dag_id = 'pipeline_corretora_santander') GROUP BY layer",
+            "refId": "E"
+          }
+        ]
+      },
+      {
+        "title": "SQL Load - Success Rate (Last 24h)",
+        "type": "gauge",
+        "targets": [
+          {
+            "query": "SELECT ROUND(100.0 * SUM(CASE WHEN state = 'success' THEN 1 ELSE 0 END) / COUNT(*), 2) as success_rate FROM task_instance WHERE task_id LIKE 't_sql_%' AND execution_date >= NOW() - INTERVAL '24 hours'",
+            "refId": "F"
+          }
+        ]
+      },
+      {
+        "title": "Pipeline End-to-End Duration (Last 7 Runs)",
+        "type": "graph",
+        "targets": [
+          {
+            "query": "SELECT execution_date, EXTRACT(EPOCH FROM (end_date - start_date)) / 60 as duration_minutes FROM dag_run WHERE dag_id = 'pipeline_corretora_santander' AND execution_date >= NOW() - INTERVAL '7 days' ORDER BY execution_date DESC LIMIT 7",
+            "refId": "G"
+          }
+        ]
+      }
+    ]
+  }
+}

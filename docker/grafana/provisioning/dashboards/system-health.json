@@ -1,0 +1,87 @@
+{
+  "dashboard": {
+    "title": "System Health & Alerts",
+    "panels": [
+      {
+        "title": "Total Failed Tasks (Last 24h)",
+        "type": "stat",
+        "targets": [
+          {
+            "query": "SELECT COUNT(*) FROM task_instance WHERE state = 'failed' AND execution_date >= NOW() - INTERVAL '24 hours'",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "title": "Total Failed DAGs (Last 24h)",
+        "type": "stat",
+        "targets": [
+          {
+            "query": "SELECT COUNT(*) FROM dag_run WHERE state = 'failed' AND execution_date >= NOW() - INTERVAL '24 hours'",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "title": "Running Tasks (Now)",
+        "type": "stat",
+        "targets": [
+          {
+            "query": "SELECT COUNT(*) FROM task_instance WHERE state = 'running'",
+            "refId": "C"
+          }
+        ]
+      },
+      {
+        "title": "Queued Tasks (Now)",
+        "type": "stat",
+        "targets": [
+          {
+            "query": "SELECT COUNT(*) FROM task_instance WHERE state = 'queued'",
+            "refId": "D"
+          }
+        ]
+      },
+      {
+        "title": "Failed Tasks Over Time (Last 7d)",
+        "type": "graph",
+        "targets": [
+          {
+            "query": "SELECT DATE_TRUNC('day', execution_date) as date, COUNT(*) as failures FROM task_instance WHERE state = 'failed' AND execution_date >= NOW() - INTERVAL '7 days' GROUP BY date ORDER BY date",
+            "refId": "E"
+          }
+        ]
+      },
+      {
+        "title": "Most Failed DAGs (Last 7d)",
+        "type": "table",
+        "targets": [
+          {
+            "query": "SELECT dag_id, COUNT(*) as failures FROM dag_run WHERE state = 'failed' AND execution_date >= NOW() - INTERVAL '7 days' GROUP BY dag_id ORDER BY failures DESC LIMIT 10",
+            "refId": "F"
+          }
+        ]
+      },
+      {
+        "title": "Longest Running Tasks (Last 24h)",
+        "type": "table",
+        "targets": [
+          {
+            "query": "SELECT task_id, dag_id, EXTRACT(EPOCH FROM (end_date - start_date)) / 60 as duration_minutes FROM task_instance WHERE execution_date >= NOW() - INTERVAL '24 hours' AND end_date IS NOT NULL ORDER BY duration_minutes DESC LIMIT 10",
+            "refId": "G"
+          }
+        ]
+      },
+      {
+        "title": "Overall Success Rate (Last 24h)",
+        "type": "gauge",
+        "targets": [
+          {
+            "query": "SELECT ROUND(100.0 * SUM(CASE WHEN state = 'success' THEN 1 ELSE 0 END) / COUNT(*), 2) as success_rate FROM task_instance WHERE execution_date >= NOW() - INTERVAL '24 hours'",
+            "refId": "H"
+          }
+        ]
+      }
+    ]
+  }
+}

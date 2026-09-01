@@ -3,13 +3,16 @@ Job: Silver World Bank
 """
 
 import sys
+from src.config.environment import setup_python_path
 
-sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
+setup_python_path()
+from src.config.logging import info, error, warning
 
 from datetime import datetime
 
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
+from src.config.secrets import get_secret
 
 from src.config.settings import configure_adls
 from src.transformation.silver_world_bank import transformar_world_bank
@@ -17,23 +20,23 @@ from src.transformation.silver_world_bank import transformar_world_bank
 
 def main():
     inicio = datetime.now()
-    print(f"=== JOB SILVER_WORLD_BANK INICIADO: {inicio} ===")
+    info("job_silver_world_bank", f"=== JOB SILVER_WORLD_BANK INICIADO: {inicio} ===")
 
     spark = DatabricksSession.builder.getOrCreate()
 
-    client_id = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
-    tenant_id = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
-    client_secret = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
-    storage_account = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
+    client_id = get_secret("client-id")
+    tenant_id = get_secret("tenant-id")
+    client_secret = get_secret("client-secret")
+    storage_account = get_secret("storage-account")
 
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
 
     total_wb = transformar_world_bank(spark, storage_account)
 
     fim = datetime.now()
-    print("\n=== JOB SILVER_WORLD_BANK CONCLUIDO ===")
-    print(f"World Bank: {total_wb} registros")
-    print(f"Duracao:    {(fim - inicio).total_seconds():.2f}s")
+    info("job_silver_world_bank", "\n=== JOB SILVER_WORLD_BANK CONCLUIDO ===")
+    info("job_silver_world_bank", f"World Bank: {total_wb} registros")
+    info("job_silver_world_bank", f"Duracao:    {(fim - inicio).total_seconds():.2f}s")
 
 
 main()

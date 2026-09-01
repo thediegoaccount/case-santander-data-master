@@ -31,9 +31,6 @@ def transformar_bcb(spark: SparkSession, storage_account: str) -> int:
         .drop("extracao")
     # fmt: on
 
-    print(f"Registros após transformação: {df_silver.count()}")
-    df_silver.show(3)
-
     # fmt: off
     df_silver.write \
         .format("delta") \
@@ -42,6 +39,5 @@ def transformar_bcb(spark: SparkSession, storage_account: str) -> int:
         .save(silver_path)
     # fmt: on
 
-    total = df_silver.count()
-    print(f"Silver BCB gravado: {total} registros")
-    return total
+    print("Silver BCB gravado")
+    return 0  # Metrics in Spark UI

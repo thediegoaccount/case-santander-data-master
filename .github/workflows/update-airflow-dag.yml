@@ -1,0 +1,207 @@
+name: Update Airflow DAG
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'databricks.yml'
+      - 'jobs/**'
+      - 'scripts/auto_generate_dag.py'
+      - 'src/pipeline/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Ambiente (hk ou prod)'
+        required: true
+        default: 'hk'
+        type: choice
+        options:
+          - hk
+          - prod
+
+env:
+  PYTHON_VERSION: '3.9'
+
+jobs:
+  # ========================================
+  # VALIDAÇÃO DO DATABRICKS.YML
+  # ========================================
+  validate-databricks-yml:
+    name: Validate databricks.yml
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          pip install pyyaml
+      
+      - name: Validate YAML syntax
+        run: |
+          python -c "
+          import yaml
+          with open('databricks.yml', 'r') as f:
+              yaml.safe_load(f)
+          print('databricks.yml valid!')
+          "
+      
+      - name: Check for required fields
+        run: |
+          python -c "
+          import yaml
+          with open('databricks.yml', 'r') as f:
+              config = yaml.safe_load(f)
+          
+          if 'resources' not in config:
+              raise ValueError('Missing resources in databricks.yml')
+          if 'jobs' not in config['resources']:
+              raise ValueError('Missing jobs in databricks.yml')
+          
+          print('Required fields present!')
+          "
+  
+  # ========================================
+  # GERAÇÃO DO DAG
+  # ========================================
+  generate-dag:
+    name: Generate Airflow DAG
+    runs-on: ubuntu-latest
+    needs: validate-databricks-yml
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          pip install pyyaml
+      
+      - name: Configure Python path
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+          from src.config.environment import setup_python_path
+          setup_python_path()
+          print('Python path configured!')
+          "
+      
+      - name: Generate DAG
+        run: |
+          python scripts/auto_generate_dag.py
+      
+      - name: Validate generated DAG
+        run: |
+          python -c "
+          import ast
+          with open('dags/dag_pipeline_santander_auto.py', 'r') as f:
+              ast.parse(f.read())
+          print('DAG syntax valid!')
+          "
+      
+      - name: Upload DAG artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: airflow-dag
+          path: dags/dag_pipeline_santander_auto.py
+  
+  # ========================================
+  # VALIDAÇÃO DO DAG
+  # ========================================
+  validate-dag:
+    name: Validate Generated DAG
+    runs-on: ubuntu-latest
+    needs: generate-dag
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download DAG artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: airflow-dag
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install Airflow
+        run: |
+          pip install apache-airflow
+      
+      - name: Validate DAG syntax
+        run: |
+          python -c "
+          from airflow import DAG
+          from datetime import datetime, timedelta
+          
+          # Tentar importar DAG
+          exec(open('dag_pipeline_santander_auto.py').read())
+          
+          print('DAG valid!')
+          "
+  
+  # ========================================
+  # ATUALIZAÇÃO DO REPOSITÓRIO
+  # ========================================
+  update-repo:
+    name: Update Repository with DAG
+    runs-on: ubuntu-latest
+    needs: [validate-dag]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Download DAG artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: airflow-dag
+      
+      - name: Commit DAG
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add dags/dag_pipeline_santander_auto.py
+          git diff --staged --quiet || git commit -m "chore: update Airflow DAG from databricks.yml [skip ci]"
+      
+      - name: Push DAG
+        run: |
+          git push
+  
+  # ========================================
+  # NOTIFICAÇÃO
+  # ========================================
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    needs: [validate-databricks-yml, generate-dag, validate-dag, update-repo]
+    if: always()
+    
+    steps:
+      - name: Notify Success
+        if: needs.generate-dag.result == 'success' && needs.validate-dag.result == 'success'
+        run: |
+          echo "Airflow DAG atualizado com sucesso!"
+      
+      - name: Notify Failure
+        if: needs.validate-databricks-yml.result == 'failure' || needs.generate-dag.result == 'failure' || needs.validate-dag.result == 'failure'
+        run: |
+          echo "Falha ao atualizar Airflow DAG!"
