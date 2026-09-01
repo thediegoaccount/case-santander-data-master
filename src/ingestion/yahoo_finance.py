@@ -25,17 +25,17 @@ def extrair_acoes(spark, storage_account: str = None, acoes: list = ACOES) -> in
     """
     env = get_env()
     config = get_config()
-    
+
     # Usar storage account do ambiente se não fornecido
     if storage_account is None:
         storage_account = config["storage_account"]
-    
+
     data_hoje = datetime.now().strftime("%Y-%m-%d")
-    
+
     print(f"[{env.upper()}] Extraindo {len(acoes)} acoes B3...")
     print(f"[{env.upper()}] Storage Account: {storage_account}")
     print(f"[{env.upper()}] Catalog: {config['catalog']}")
-    
+
     if is_production():
         print(f"[{env.upper()}] *** PRODUÇÃO *** - Dados reais serão gravados")
 
@@ -44,7 +44,7 @@ def extrair_acoes(spark, storage_account: str = None, acoes: list = ACOES) -> in
     for i, acao in enumerate(acoes):
         # Rate limiting por ambiente
         rate_limiter.wait_if_needed("yahoo_finance")
-        
+
         try:
             ticker = yf.Ticker(acao)
             df = ticker.history(period="2y")
@@ -53,10 +53,10 @@ def extrair_acoes(spark, storage_account: str = None, acoes: list = ACOES) -> in
             df["ambiente"] = env  # Tag de ambiente para rastreabilidade
             df_total = pd.concat([df_total, df])
             print(f"[{env.upper()}] OK: {acao} — {len(df)} registros ({i+1}/{len(acoes)})")
-            
+
             # Pequena pausa entre requests para respeitar rate limit
             time.sleep(0.5)
-            
+
         except Exception as e:
             print(f"[{env.upper()}] ERRO: {acao} — {e}")
 

@@ -11,28 +11,28 @@ from src.ingestion.api_wrapper import rate_limiter
 def extrair_bcb(spark, storage_account: str = None) -> int:
     """
     Extrai dados do BCB com isolamento por ambiente.
-    
+
     Args:
         spark: Sessão Spark
         storage_account: Nome do storage account (opcional, usa config do ambiente)
-    
+
     Returns: total de registros gravados
     """
     env = get_env()
     config = get_config()
-    
+
     # Usar storage account do ambiente se não fornecido
     if storage_account is None:
         storage_account = config["storage_account"]
-    
+
     data_hoje = datetime.now().strftime("%Y-%m-%d")
     data_inicial = "01/04/2021"
     data_final = "01/04/2026"
-    
+
     print(f"[{env.upper()}] Extraindo dados BCB...")
     print(f"[{env.upper()}] Storage Account: {storage_account}")
     print(f"[{env.upper()}] Catalog: {config['catalog']}")
-    
+
     if is_production():
         print(f"[{env.upper()}] *** PRODUÇÃO *** - Dados reais serão gravados")
 
@@ -43,7 +43,7 @@ def extrair_bcb(spark, storage_account: str = None) -> int:
         """
         # Rate limiting por ambiente
         rate_limiter.wait_if_needed("bcb")
-        
+
         # IMPORTANTE: BCB exige filtros de data desde 26/03/2025
         # Período máximo: 10 anos
         url = (
@@ -61,7 +61,9 @@ def extrair_bcb(spark, storage_account: str = None) -> int:
 
                 # 1. Validar status HTTP
                 if response.status_code != 200:
-                    print(f"[{env.upper()}]   {nome} — HTTP {response.status_code} (tentativa {tentativa}/{max_retries})")
+                    print(
+                        f"[{env.upper()}]   {nome} — HTTP {response.status_code} (tentativa {tentativa}/{max_retries})"
+                    )
                     if tentativa < max_retries:
                         time.sleep(2**tentativa)
                         continue
@@ -80,7 +82,9 @@ def extrair_bcb(spark, storage_account: str = None) -> int:
                 # 3. Validar content-type é JSON (não HTML de erro)
                 content_type = response.headers.get("Content-Type", "")
                 if "json" not in content_type.lower() and "javascript" not in content_type.lower():
-                    print(f"[{env.upper()}]   {nome} — Content-Type inválido: {content_type} (tentativa {tentativa}/{max_retries})")
+                    print(
+                        f"[{env.upper()}]   {nome} — Content-Type inválido: {content_type} (tentativa {tentativa}/{max_retries})"
+                    )
                     print(f"[{env.upper()}]    Primeiros 100 chars: {response.text[:100]}")
                     if tentativa < max_retries:
                         time.sleep(2**tentativa)
@@ -92,7 +96,9 @@ def extrair_bcb(spark, storage_account: str = None) -> int:
                 try:
                     json_data = response.json()
                 except ValueError as json_err:
-                    print(f"[{env.upper()}]   {nome} — JSON inválido: {str(json_err)[:80]} (tentativa {tentativa}/{max_retries})")
+                    print(
+                        f"[{env.upper()}]   {nome} — JSON inválido: {str(json_err)[:80]} (tentativa {tentativa}/{max_retries})"
+                    )
                     print(f"[{env.upper()}]    Primeiros 100 chars: {response.text[:100]}")
                     if tentativa < max_retries:
                         time.sleep(2**tentativa)

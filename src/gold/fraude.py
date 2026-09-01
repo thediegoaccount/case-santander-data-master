@@ -19,13 +19,11 @@ def detectar_fraude(spark: SparkSession) -> int:
     print("Detectando fraudes...")
 
     df_ordens = spark.sql("SELECT * FROM case_santander.silver.ordens")
-    df_score = spark.sql(
-        """
+    df_score = spark.sql("""
         SELECT hash_cliente, score_risco,
                categoria_risco, limite_operacional
         FROM case_santander.gold.score_risco_clientes
-    """
-    )
+    """)
 
     # Validate broadcast size: df_score pode crescer com SCD Type-2
     # Fallback para sort-merge join se > 2GB
@@ -39,7 +37,7 @@ def detectar_fraude(spark: SparkSession) -> int:
         """).collect()[0][0] or 0
 
         use_broadcast = (df_score_size < max_broadcast_bytes) if df_score_size else True
-    except:
+    except Exception:
         # Se erro na estimativa, usa broadcast conservativamente
         use_broadcast = True
 

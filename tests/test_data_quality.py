@@ -6,7 +6,7 @@ Valida qualidade de dados em cada camada (Bronze, Silver, Gold)
 
 import pytest
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType
+from pyspark.sql import functions as F
 
 
 def test_bronze_clientes_completeness(spark_session):

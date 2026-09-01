@@ -27,7 +27,6 @@ config = get_config()
 | **Unity Catalog** | `case_santander` (mesmo) | `case_santander` (mesmo) |
 | **Schemas** | `hk_bronze`, `hk_silver`, `hk_gold` | `prod_bronze`, `prod_silver`, `prod_gold` |
 | **Event Hub** | `evhcasesantander-hk` | `evhcasesantander` |
-| **SQL Database** | `sqldb-case-santander-hk` | `sqldb-case-santander` |
 
 **Nota:** Unity Catalog é compartilhado entre ambientes, mas com schemas separados (`hk_*` vs `prod_*`) para isolamento lógico sem custo adicional.
 

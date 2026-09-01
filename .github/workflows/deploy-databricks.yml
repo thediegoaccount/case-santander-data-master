@@ -123,7 +123,7 @@ jobs:
 
       - name: Upload deployment logs
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: deploy-dev-logs
           path: deploy.log
@@ -217,14 +217,14 @@ jobs:
 
       - name: Upload deployment logs
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: deploy-prod-logs
           path: deploy.log
 
       - name: Upload backup
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: prod-backup-${{ github.sha }}
           path: backups/
@@ -246,9 +246,19 @@ jobs:
 
       - name: Install Airflow
         run: |
-          pip install apache-airflow==2.7.0
-          pip install apache-airflow-providers-databricks
-          pip install pyyaml
+          # Core + provider precisam ser resolvidos JUNTOS e com o constraints oficial do Airflow.
+          # Instalar o provider em um pip separado (sem pin) faz o pip puxar a versão mais recente
+          # (7.x, que exige apache-airflow>=2.11), desinstalar o core 2.7.0 e deixar o diretório
+          # airflow/ apenas com providers/ — um namespace package quebrado, cujo sintoma é:
+          # "ImportError: cannot import name 'DAG' from 'airflow' (unknown location)"
+          AIRFLOW_VERSION=2.7.0
+          PY_VERSION=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+          CONSTRAINTS="https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PY_VERSION}.txt"
+          pip install \
+            "apache-airflow==${AIRFLOW_VERSION}" \
+            apache-airflow-providers-databricks \
+            pyyaml \
+            --constraint "${CONSTRAINTS}"
 
       - name: Sync Airflow DAG with Databricks Asset Bundles
         run: |

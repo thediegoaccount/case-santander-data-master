@@ -6,7 +6,6 @@ Impossível reverter (one-way hash) mesmo com acesso ao salt.
 """
 
 import hashlib
-from databricks.sdk.runtime import dbutils
 from src.config.secrets import get_secret
 
 
@@ -21,28 +20,28 @@ def get_salt():
 def hash_with_salt(data: str, salt: str = None) -> str:
     """
     Gera hash SHA256 com salt (one-way, não reversível)
-    
+
     Args:
         data: Dado a ser mascarado
         salt: Salt para hashing (opcional, usa Key Vault se não fornecido)
-    
+
     Returns:
         Hash SHA256 em formato hexadecimal (64 caracteres)
-    
+
     Nota:
         Mesmo com acesso ao salt, não é possível reverter o hash original.
         O salt apenas previne ataques de rainbow table.
     """
     if salt is None:
         salt = get_salt()
-    
+
     # Concatenar dado + salt
     salted_data = f"{data}{salt}"
-    
+
     # Gerar hash SHA256
-    hash_obj = hashlib.sha256(salted_data.encode('utf-8'))
+    hash_obj = hashlib.sha256(salted_data.encode("utf-8"))
     hash_hex = hash_obj.hexdigest()
-    
+
     return hash_hex
 
 
@@ -72,34 +71,35 @@ def hash_email(email: str) -> str:
 def anonymize_customer_row(row, salt=None):
     """
     Anonimiza uma linha de dados do cliente
-    
+
     Args:
         row: Dicionário com dados do cliente
         salt: Salt opcional
-    
+
     Returns:
         Dicionário com dados mascarados
     """
     anonymized = {}
-    
+
     for key, value in row.items():
-        if key in ['CustomerId', 'Surname', 'Email']:
+        if key in ["CustomerId", "Surname", "Email"]:
             anonymized[key] = hash_with_salt(str(value), salt)
         else:
             anonymized[key] = value
-    
+
     return anonymized
 
 
 def generate_random_salt(length=32):
     """
     Gera um salt aleatório criptograficamente seguro
-    
+
     Args:
         length: Comprimento do salt em bytes
-    
+
     Returns:
         Salt em formato hexadecimal
     """
     import secrets
+
     return secrets.token_hex(length)

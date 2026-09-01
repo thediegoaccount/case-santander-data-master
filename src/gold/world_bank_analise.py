@@ -89,11 +89,9 @@ def analisar_contexto_macro(spark: SparkSession) -> int:
     # fmt: on
 
     # Gravar Gold
-    df_analise.write \
-        .format("delta") \
-        .mode("overwrite") \
-        .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.gold.contexto_macroeonomico")
+    df_analise.write.format("delta").mode("overwrite").option("mergeSchema", "true").saveAsTable(
+        "case_santander.gold.contexto_macroeonomico"
+    )
 
     print("Gold contexto_macroeconomico gravado")
     return 0  # Metrics in Spark UI

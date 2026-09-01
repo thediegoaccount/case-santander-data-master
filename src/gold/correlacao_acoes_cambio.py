@@ -108,11 +108,9 @@ def correlacionar_acoes_cambio(spark: SparkSession) -> int:
     # fmt: on
 
     # Gravar Gold
-    df_resultado.write \
-        .format("delta") \
-        .mode("overwrite") \
-        .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.gold.acoes_vs_cambio")
+    df_resultado.write.format("delta").mode("overwrite").option("mergeSchema", "true").saveAsTable(
+        "case_santander.gold.acoes_vs_cambio"
+    )
 
     print("Gold acoes_vs_cambio gravado")
     return 0  # Metrics in Spark UI

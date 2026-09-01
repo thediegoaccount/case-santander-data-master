@@ -221,142 +221,6 @@ resources:
           timeout_seconds: 3600
           max_retries: 2
 
-  #  JOBS: CARGA SQL 
-    t_carga_sql_acoes:
-      name: "[${var.environment}] Carga SQL - Ações"
-      description: "Carrega performance_acoes e anomalias no SQL Database"
-      tags:
-        team: data-engineering
-        layer: sql
-        target: azure-sql
-        cluster_type: job
-
-      tasks:
-        - task_key: sql_acoes
-          python_wheel_task:
-            package_name: case_santander
-            entry_point: jobs.job_carga_sql_acoes
-          new_cluster:
-            spark_version: ${var.spark_version}
-            node_type_id: "i3.xlarge"
-            num_workers: ${var.sql_workers}
-            aws_attributes:
-              availability: "SPOT"
-              zone_id: "us-west-2a"
-            idle_timeout_minutes: 10
-            spark_conf:
-              "spark.sql.shuffle.partitions": "100"
-          timeout_seconds: 1800
-          max_retries: 2
-
-    t_carga_sql_clientes:
-      name: "[${var.environment}] Carga SQL - Clientes"
-      description: "Carrega 5 tabelas de análise de clientes"
-      tags:
-        team: data-engineering
-        layer: sql
-        target: azure-sql
-        cluster_type: job
-
-      tasks:
-        - task_key: sql_clientes
-          python_wheel_task:
-            package_name: case_santander
-            entry_point: jobs.job_carga_sql_clientes
-          new_cluster:
-            spark_version: ${var.spark_version}
-            node_type_id: "i3.xlarge"
-            num_workers: ${var.sql_workers}
-            aws_attributes:
-              availability: "SPOT"
-              zone_id: "us-west-2a"
-            idle_timeout_minutes: 10
-            spark_conf:
-              "spark.sql.shuffle.partitions": "100"
-          timeout_seconds: 1800
-          max_retries: 2
-
-    t_carga_sql_fraude:
-      name: "[${var.environment}] Carga SQL - Fraude"
-      description: "Carrega deteccao_fraude"
-      tags:
-        team: data-engineering
-        layer: sql
-        target: azure-sql
-        cluster_type: job
-
-      tasks:
-        - task_key: sql_fraude
-          python_wheel_task:
-            package_name: case_santander
-            entry_point: jobs.job_carga_sql_fraude
-          new_cluster:
-            spark_version: ${var.spark_version}
-            node_type_id: "i3.xlarge"
-            num_workers: ${var.sql_workers}
-            aws_attributes:
-              availability: "SPOT"
-              zone_id: "us-west-2a"
-            idle_timeout_minutes: 10
-            spark_conf:
-              "spark.sql.shuffle.partitions": "100"
-          timeout_seconds: 1800
-          max_retries: 2
-
-    t_carga_sql_streaming:
-      name: "[${var.environment}] Carga SQL - Streaming"
-      description: "Carrega 4 tabelas de análise real-time"
-      tags:
-        team: data-engineering
-        layer: sql
-        target: azure-sql
-        cluster_type: job
-
-      tasks:
-        - task_key: sql_streaming
-          python_wheel_task:
-            package_name: case_santander
-            entry_point: jobs.job_carga_sql_streaming
-          new_cluster:
-            spark_version: ${var.spark_version}
-            node_type_id: "i3.xlarge"
-            num_workers: ${var.sql_workers}
-            aws_attributes:
-              availability: "SPOT"
-              zone_id: "us-west-2a"
-            idle_timeout_minutes: 10
-            spark_conf:
-              "spark.sql.shuffle.partitions": "100"
-          timeout_seconds: 1800
-          max_retries: 2
-
-    t_carga_sql_macro:
-      name: "[${var.environment}] Carga SQL - Indicadores Macro"
-      description: "Carrega indicadores BCB, contexto macroeconômico e correlações"
-      tags:
-        team: data-engineering
-        layer: sql
-        target: azure-sql
-        cluster_type: job
-
-      tasks:
-        - task_key: sql_macro
-          python_wheel_task:
-            package_name: case_santander
-            entry_point: jobs.job_carga_sql_macro
-          new_cluster:
-            spark_version: ${var.spark_version}
-            node_type_id: "i3.xlarge"
-            num_workers: ${var.sql_workers}
-            aws_attributes:
-              availability: "SPOT"
-              zone_id: "us-west-2a"
-            idle_timeout_minutes: 10
-            spark_conf:
-              "spark.sql.shuffle.partitions": "100"
-          timeout_seconds: 1800
-          max_retries: 2
-
     #  STREAMING CONTÍNUO (Serviço 24/7 - Independente do pipeline diário)
     streaming_continuous:
       name: "[${var.environment}] Streaming Contínuo"
@@ -745,100 +609,16 @@ resources:
         timeout_seconds: 3600
         max_retries: 2
 
-      #  CARGA SQL (Paralelo)
-      - task_key: t_sql_acoes
-        description: "Carga SQL Ações"
-        depends_on:
-          - task_key: t3_anomalias
-          - task_key: t3_acoes_cambio
-        python_wheel_task:
-          package_name: case_santander
-          entry_point: jobs.job_carga_sql_acoes
-        new_cluster:
-          spark_version: ${var.spark_version}
-          node_type_id: "i3.xlarge"
-          num_workers: ${var.sql_workers}
-          aws_attributes:
-            availability: "SPOT"
-            zone_id: "us-west-2a"
-          idle_timeout_minutes: 10
-          spark_conf:
-            "spark.sql.shuffle.partitions": "100"
-        timeout_seconds: 1800
-        max_retries: 2
-
-      - task_key: t_sql_fraude
-        description: "Carga SQL Fraude"
-        depends_on:
-          - task_key: t3_fraude
-        python_wheel_task:
-          package_name: case_santander
-          entry_point: jobs.job_carga_sql_fraude
-        new_cluster:
-          spark_version: ${var.spark_version}
-          node_type_id: "i3.xlarge"
-          num_workers: ${var.sql_workers}
-          aws_attributes:
-            availability: "SPOT"
-            zone_id: "us-west-2a"
-          idle_timeout_minutes: 10
-          spark_conf:
-            "spark.sql.shuffle.partitions": "100"
-        timeout_seconds: 1800
-        max_retries: 2
-
-      - task_key: t_sql_clientes
-        description: "Carga SQL Clientes"
-        depends_on:
-          - task_key: t7_corretora_analises
-          - task_key: t9_scd
-        python_wheel_task:
-          package_name: case_santander
-          entry_point: jobs.job_carga_sql_clientes
-        new_cluster:
-          spark_version: ${var.spark_version}
-          node_type_id: "i3.xlarge"
-          num_workers: ${var.sql_workers}
-          aws_attributes:
-            availability: "SPOT"
-            zone_id: "us-west-2a"
-          idle_timeout_minutes: 10
-          spark_conf:
-            "spark.sql.shuffle.partitions": "100"
-        timeout_seconds: 1800
-        max_retries: 2
-
-      - task_key: t_sql_macro
-        description: "Carga SQL Macro"
-        depends_on:
-          - task_key: t3_bcb
-          - task_key: t3_world_bank
-          - task_key: t3_acoes_cambio
-        python_wheel_task:
-          package_name: case_santander
-          entry_point: jobs.job_carga_sql_macro
-        new_cluster:
-          spark_version: ${var.spark_version}
-          node_type_id: "i3.xlarge"
-          num_workers: ${var.sql_workers}
-          aws_attributes:
-            availability: "SPOT"
-            zone_id: "us-west-2a"
-          idle_timeout_minutes: 10
-          spark_conf:
-            "spark.sql.shuffle.partitions": "100"
-        timeout_seconds: 1800
-        max_retries: 2
-
       #  FINALIZAÇÃO
       - task_key: t8_lakehouse_monitoring
         description: "Lakehouse Monitoring"
+        # Depende das folhas da camada Gold (t3_acoes_cambio cobre t3_performance e t3_bcb;
+        # t3_fraude cobre t7_corretora_analises e t9_scd)
         depends_on:
-          - task_key: t_sql_acoes
-          - task_key: t_sql_clientes
-          - task_key: t_sql_fraude
-          - task_key: t_sql_streaming
-          - task_key: t_sql_macro
+          - task_key: t3_anomalias
+          - task_key: t3_acoes_cambio
+          - task_key: t3_world_bank
+          - task_key: t3_fraude
         python_wheel_task:
           package_name: case_santander
           entry_point: jobs.job_lakehouse_monitoring
@@ -856,11 +636,7 @@ resources:
       - task_key: t4_observabilidade
         description: "Observabilidade"
         depends_on:
-          - task_key: t_sql_acoes
-          - task_key: t_sql_clientes
-          - task_key: t_sql_fraude
-          - task_key: t_sql_streaming
-          - task_key: t_sql_macro
+          - task_key: t8_lakehouse_monitoring
         python_wheel_task:
           package_name: case_santander
           entry_point: jobs.job_observabilidade
@@ -875,11 +651,13 @@ resources:
         timeout_seconds: 3600
         max_retries: 2
 
-    # Schedule único para o workflow pai
-    schedule:
-      quartz_cron_expression: "0 6 * * ?"  # 06:00 BRT todo dia
-      timezone_id: "America/Sao_Paulo"
-      pause_status: UNPAUSED
+      # Schedule único para o workflow pai
+      # (precisa ficar aninhado em pipeline_completo — com 4 espaços virava um
+      #  job fantasma chamado "schedule" e o pipeline era implantado sem agendamento)
+      schedule:
+        quartz_cron_expression: "0 6 * * ?"  # 06:00 BRT todo dia
+        timezone_id: "America/Sao_Paulo"
+        pause_status: UNPAUSED
 
 targets:
   # Ambiente de Homologação (Job Clusters - Menores)

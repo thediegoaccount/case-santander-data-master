@@ -2,8 +2,6 @@
 STORAGE_ACCOUNT = "stcasesantander"
 EVENTHUB_NAME   = "transacoes-financeiras"
 EVENTHUB_NS     = "evhcasesantander"
-SQL_SERVER      = "sqlsvr-case-santander.database.windows.net"
-SQL_DATABASE    = "sqldb-case-santander"
 
 # Camadas ADLS
 BRONZE = f"abfss://bronze@{STORAGE_ACCOUNT}.dfs.core.windows.net"

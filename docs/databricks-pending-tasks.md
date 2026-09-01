@@ -91,11 +91,6 @@ environments:
 
 #### Outros
 - [ ] `jobs/job_streaming.py` - Precisa atualizar (usar `enable_streaming`)
-- [ ] `jobs/job_carga_sql_acoes.py` - Precisa atualizar
-- [ ] `jobs/job_carga_sql_clientes.py` - Precisa atualizar
-- [ ] `jobs/job_carga_sql_fraude.py` - Precisa atualizar
-- [ ] `jobs/job_carga_sql_streaming.py` - Precisa atualizar
-- [ ] `jobs/job_carga_sql_macro.py` - Precisa atualizar
 
 **Padrão de atualização:**
 

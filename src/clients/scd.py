@@ -70,25 +70,21 @@ def aplicar_scd_clientes(spark: SparkSession, storage_account: str = None) -> in
     """
     print("Aplicando SCD Type 2 em clientes...")
 
-    df_clientes = spark.sql(
-        """
+    df_clientes = spark.sql("""
         SELECT
             id_cliente, hash_cliente, sobrenome_masked,
             perfil_risco, score_credito, faixa_saldo,
             faixa_etaria, score_categoria, ativo, churn
         FROM case_santander.silver.clientes
-    """
-    )
+    """)
 
     aplicar_scd_type2(spark, df_clientes, "case_santander.silver.clientes_scd", "hash_cliente")
 
-    total = spark.sql(
-        """
+    total = spark.sql("""
         SELECT COUNT(*) as total
         FROM case_santander.silver.clientes_scd
         WHERE atual = true
-    """
-    ).collect()[0]["total"]
+    """).collect()[0]["total"]
 
     print(f"SCD clientes — {total} registros ativos")
     return total
@@ -100,25 +96,21 @@ def aplicar_scd_score_risco(spark: SparkSession, storage_account: str = None) ->
     """
     print("Aplicando SCD Type 2 em score de risco...")
 
-    df_score = spark.sql(
-        """
+    df_score = spark.sql("""
         SELECT
             hash_cliente, perfil_risco, faixa_saldo,
             score_credito, score_risco, categoria_risco,
             limite_operacional, num_ativos, total_ordens
         FROM case_santander.gold.score_risco_clientes
-    """
-    )
+    """)
 
     aplicar_scd_type2(spark, df_score, "case_santander.gold.score_risco_scd", "hash_cliente")
 
-    total = spark.sql(
-        """
+    total = spark.sql("""
         SELECT COUNT(*) as total
         FROM case_santander.gold.score_risco_scd
         WHERE atual = true
-    """
-    ).collect()[0]["total"]
+    """).collect()[0]["total"]
 
     print(f"SCD score risco — {total} registros ativos")
     return total
