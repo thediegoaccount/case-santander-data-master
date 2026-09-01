@@ -3,8 +3,10 @@ Job: Observabilidade
 """
 
 import sys
+from src.config.environment import setup_python_path
 
-sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
+setup_python_path()
+from src.config.logging import info, error, warning
 
 from datetime import datetime
 
@@ -15,7 +17,7 @@ from src.observability.monitoring import executar_monitoramento
 
 def main():
     inicio = datetime.now()
-    print(f"=== JOB OBSERVABILIDADE INICIADO: {inicio} ===")
+    info("job_observabilidade", f"=== JOB OBSERVABILIDADE INICIADO: {inicio} ===")
 
     spark = DatabricksSession.builder.getOrCreate()
 
@@ -33,7 +35,7 @@ def main():
 
     # Manutenção Delta: OPTIMIZE compacta small files e VACUUM remove
     # versões antigas além da janela de retenção (168h = 7 dias)
-    print("\nExecutando manutenção Delta (OPTIMIZE + VACUUM)...")
+    info("job_observabilidade", "\nExecutando manutenção Delta (OPTIMIZE + VACUUM)...")
     # fmt: off
     tabelas_manutencao = [
         ("case_santander.silver.acoes",              "ticker, ano, mes"),
@@ -53,14 +55,14 @@ def main():
         try:
             spark.sql(f"OPTIMIZE {tabela} ZORDER BY ({cols_zorder})")
             spark.sql(f"VACUUM {tabela} RETAIN 168 HOURS")
-            print(f"  ✅ {tabela}")
+            info("job_observabilidade", f"   {tabela}")
         except Exception as e:
-            print(f"  ⚠️ {tabela}: {e}")
+            info("job_observabilidade", f"   {tabela}: {e}")
 
     fim = datetime.now()
-    print("\n=== JOB OBSERVABILIDADE CONCLUIDO ===")
-    print(f"Tabelas monitoradas: {len(resultados)}")
-    print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
+    info("job_observabilidade", "\n=== JOB OBSERVABILIDADE CONCLUIDO ===")
+    info("job_observabilidade", f"Tabelas monitoradas: {len(resultados)}")
+    info("job_observabilidade", f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
 
 main()

@@ -45,6 +45,5 @@ def calcular_performance(spark: SparkSession, storage_account: str) -> int:
         .save(gold_path)
     # fmt: on
 
-    total = df_performance.count()
-    print(f"Gold performance gravado: {total} registros")
-    return total
+    print("Gold performance gravado")
+    return 0  # Metrics available in Spark UI

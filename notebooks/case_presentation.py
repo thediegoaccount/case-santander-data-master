@@ -57,29 +57,29 @@
 # COMMAND ----------
 # MAGIC %md
 # MAGIC ```
-# MAGIC ╔══════════════════════════════════════════════════════════════════════════════════════════╗
-# MAGIC ║              PLATAFORMA DE DADOS — SANTANDER CORRETORA DIGITAL                          ║
-# MAGIC ╠══════════════════════════════════════════════════════════════════════════════════════════╣
-# MAGIC ║                                                                                          ║
-# MAGIC ║  FONTES               BRONZE              SILVER              GOLD              CONSUMO  ║
-# MAGIC ║  (externas)           (bruto,              (limpo,             (analítico,                ║
-# MAGIC ║                        imutável)            enriquecido)        negócio)                  ║
-# MAGIC ║                                                                                          ║
-# MAGIC ║  Yahoo Finance ──────►acoes               acoes         ┌────►anomalias                  ║
-# MAGIC ║  BCB API       ──────►bcb                 bcb           │     performance_acoes           ║
-# MAGIC ║  World Bank    ──────►world_bank           world_bank    │                       Azure SQL ║
-# MAGIC ║  Kaggle        ──────►clientes ──────LGPD►clientes ─────┼────►score_risco      Genie AI  ║
-# MAGIC ║                       ordens               ordens        │     deteccao_fraude  Dashboard  ║
-# MAGIC ║  Event Hub ═══════════►kafka               streaming ────┘     fraude_streaming            ║
-# MAGIC ║  (Kafka/Auto Loader)                        (CDC)              anomalias_intraday          ║
-# MAGIC ║                                                                volume_intraday             ║
-# MAGIC ║                                                                ranking_realtime            ║
-# MAGIC ║  ─────────────────────────────────────────────────────────────────────────────────────  ║
-# MAGIC ║  ORQUESTRAÇÃO:  Databricks Workflow (prod) · Apache Airflow + Docker (dev)               ║
-# MAGIC ║  GOVERNANÇA:    Unity Catalog · RBAC · Secret Scope · Azure Key Vault                   ║
-# MAGIC ║  CI/CD:         GitHub Actions (quality → security → test → build → deploy)              ║
-# MAGIC ║  CONFORMIDADE:  LGPD (hash SHA-256) · SCD Type 2 · VACUUM 7 dias · CVM Res.30/2021      ║
-# MAGIC ╚══════════════════════════════════════════════════════════════════════════════════════════╝
+# MAGIC 
+# MAGIC               PLATAFORMA DE DADOS — SANTANDER CORRETORA DIGITAL                          
+# MAGIC 
+# MAGIC                                                                                           
+# MAGIC   FONTES               BRONZE              SILVER              GOLD              CONSUMO  
+# MAGIC   (externas)           (bruto,              (limpo,             (analítico,                
+# MAGIC                         imutável)            enriquecido)        negócio)                  
+# MAGIC                                                                                           
+# MAGIC   Yahoo Finance acoes               acoes         anomalias                  
+# MAGIC   BCB API       bcb                 bcb                performance_acoes           
+# MAGIC   World Bank    world_bank           world_bank                           Azure SQL 
+# MAGIC   Kaggle        clientes LGPDclientes score_risco      Genie AI  
+# MAGIC                        ordens               ordens             deteccao_fraude  Dashboard  
+# MAGIC   Event Hub kafka               streaming      fraude_streaming            
+# MAGIC   (Kafka/Auto Loader)                        (CDC)              anomalias_intraday          
+# MAGIC                                                                 volume_intraday             
+# MAGIC                                                                 ranking_realtime            
+# MAGIC     
+# MAGIC   ORQUESTRAÇÃO:  Databricks Workflow (prod) · Apache Airflow + Docker (dev)               
+# MAGIC   GOVERNANÇA:    Unity Catalog · RBAC · Secret Scope · Azure Key Vault                   
+# MAGIC   CI/CD:         GitHub Actions (quality → security → test → build → deploy)              
+# MAGIC   CONFORMIDADE:  LGPD (hash SHA-256) · SCD Type 2 · VACUUM 7 dias · CVM Res.30/2021      
+# MAGIC 
 # MAGIC ```
 
 # COMMAND ----------
@@ -272,14 +272,14 @@ print(f"\nDado original (Kaggle):  CustomerID = {customer_id}, Surname = '{sobre
 print(f"Dado armazenado:         hash_cliente = '{hash_cliente}', sobrenome_masked = '{sobrenome_masked}'")
 print()
 print("Propriedades do hash SHA-256:")
-print("  ✅ Determinístico — mesmo ID sempre gera o mesmo hash (joins funcionam)")
-print("  ✅ Irreversível  — impossível recuperar CustomerID a partir do hash")
-print("  ✅ Sem colisão prática — SHA-256 com 16 chars cobre 16^16 = 1,8 × 10^19 valores")
+print("   Determinístico — mesmo ID sempre gera o mesmo hash (joins funcionam)")
+print("   Irreversível  — impossível recuperar CustomerID a partir do hash")
+print("   Sem colisão prática — SHA-256 com 16 chars cobre 16^16 = 1,8 × 10^19 valores")
 print()
 print("O que NUNCA é armazenado em nenhuma camada:")
-print("  ✗ CPF        ✗ CustomerID original")
-print("  ✗ Email      ✗ Nome completo")
-print("  ✗ Telefone   ✗ Endereço")
+print("   CPF         CustomerID original")
+print("   Email       Nome completo")
+print("   Telefone    Endereço")
 
 # COMMAND ----------
 
@@ -325,22 +325,22 @@ ORDER BY clientes DESC;
 # MAGIC %md
 # MAGIC ```
 # MAGIC  Simulador de Transações          Azure Event Hub           Databricks
-# MAGIC  ┌──────────────────────┐         ┌──────────────┐         ┌─────────────────────────────────┐
-# MAGIC  │ for ticker in ACOES: │         │              │         │  Auto Loader (cloudFiles)        │
-# MAGIC  │   preco = random     │──Kafka──►  Partições   ├────────►│  · checkpoint automático         │
-# MAGIC  │   qtd   = random     │  Parquet│  por ticker  │         │  · schema evolution              │
-# MAGIC  │   tipo  = C/V        │         │              │         │  · sem listar diretório          │
-# MAGIC  └──────────────────────┘         └──────────────┘         │            │                    │
-# MAGIC                                                             │            ▼                    │
-# MAGIC                                                             │     bronze.kafka                │
-# MAGIC                                                             │            │                    │
-# MAGIC                                                             │            ▼                    │
-# MAGIC                                                             │  Transformações + alertas       │
-# MAGIC                                                             │  (alerta_volume, alerta_preco)  │
-# MAGIC                                                             │            │                    │
-# MAGIC                                                             │            ▼                    │
-# MAGIC                                                             │  silver.streaming  (CDC ON)     │
-# MAGIC                                                             └─────────────────────────────────┘
+# MAGIC                    
+# MAGIC   for ticker in ACOES:                                   Auto Loader (cloudFiles)        
+# MAGIC     preco = random     Kafka  Partições     · checkpoint automático         
+# MAGIC     qtd   = random       Parquet  por ticker             · schema evolution              
+# MAGIC     tipo  = C/V                                          · sem listar diretório          
+# MAGIC                                                    
+# MAGIC                                                                                             
+# MAGIC                                                                  bronze.kafka                
+# MAGIC                                                                                             
+# MAGIC                                                                                             
+# MAGIC                                                               Transformações + alertas       
+# MAGIC                                                               (alerta_volume, alerta_preco)  
+# MAGIC                                                                                             
+# MAGIC                                                                                             
+# MAGIC                                                               silver.streaming  (CDC ON)     
+# MAGIC                                                             
 # MAGIC ```
 
 # COMMAND ----------
@@ -348,7 +348,7 @@ ORDER BY clientes DESC;
 # Lógica do Auto Loader (código real de job_streaming.py)
 print("""
 AUTO LOADER — Por que é melhor que listar diretórios?
-─────────────────────────────────────────────────────
+
   Problema: ADLS com 1M arquivos → list() leva minutos
   Solução:  Auto Loader usa notificações de evento do Azure Storage
             (sem varredura de diretório)
@@ -370,9 +370,9 @@ df_stream.writeStream \\
     .toTable("case_santander.bronze.kafka")
 
 Propriedades:
-  ✅ Exactly-once: checkpoint garante sem duplicação mesmo após crash
-  ✅ Schema evolution: novos campos não quebram o pipeline
-  ✅ Escala a bilhões de arquivos sem mudança de código
+   Exactly-once: checkpoint garante sem duplicação mesmo após crash
+   Schema evolution: novos campos não quebram o pipeline
+   Escala a bilhões de arquivos sem mudança de código
 """)
 
 # COMMAND ----------
@@ -437,7 +437,7 @@ LIMIT 15;
 # MAGIC
 # MAGIC | Modo | Latência | Custo | Caso de uso |
 # MAGIC |------|----------|-------|-------------|
-# MAGIC | `availableNow=True` | 3-5 min | Baixo — cluster para após processar | ✅ Este case |
+# MAGIC | `availableNow=True` | 3-5 min | Baixo — cluster para após processar |  Este case |
 # MAGIC | `processingTime("30s")` | 30s | Médio — cluster sempre ativo | Alertas < 1 min |
 # MAGIC | `continuous` | < 1s | Alto — cluster dedicado | HFT, pagamentos RT |
 # MAGIC
@@ -454,7 +454,7 @@ LIMIT 15;
 # MAGIC %md
 # MAGIC ```
 # MAGIC          x − μ          variacao_diaria_pct − média_do_ticker
-# MAGIC z = ──────────────  =  ───────────────────────────────────────
+# MAGIC z =   =  
 # MAGIC          σ                      stddev_do_ticker
 # MAGIC
 # MAGIC |z| > 2  →  Anomalia  (apenas 4,6% dos valores ficam fora de ±2σ)
@@ -678,7 +678,7 @@ LIMIT 15;
 # Demonstrar o Broadcast Join usado na detecção de fraude
 print("""
 BROADCAST JOIN — Aplicado em fraude.py e streaming_gold.py
-──────────────────────────────────────────────────────────
+
 
   # df_score: ~7.900 linhas × 4 colunas < 1 MB → broadcast
   df_score = spark.table("case_santander.gold.score_risco_clientes") \\
@@ -714,10 +714,10 @@ LEFT JOIN case_santander.gold.score_risco_clientes s
 
 # MAGIC %md
 # MAGIC ```
-# MAGIC silver.streaming (CDC) ──► job_streaming_to_gold.py
-# MAGIC                                      │
-# MAGIC                   ┌──────────────────┼──────────────────┐
-# MAGIC                   ▼                  ▼                  ▼                  ▼
+# MAGIC silver.streaming (CDC)  job_streaming_to_gold.py
+# MAGIC                                      
+# MAGIC                   
+# MAGIC                                                                         
 # MAGIC           fraude_streaming   anomalias_intraday   volume_intraday   ranking_realtime
 # MAGIC           (4 regras RT)      (Z-Score por hora)   (pressão C/V)     (rank por volume)
 # MAGIC ```
@@ -804,12 +804,12 @@ ORDER BY rank_volume;
 # MAGIC ```
 # MAGIC Sem SCD Type 2:                    Com SCD Type 2:
 # MAGIC   clientes_scd                       clientes_scd
-# MAGIC   ┌─────────────────────┐            ┌──────────────────────────────────────────────────────┐
-# MAGIC   │ hash  │ perfil      │            │ hash  │ perfil      │ data_inicio │ data_fim   │atual │
-# MAGIC   │ abc1  │ Arrojado    │            │ abc1  │ Conservador │ 2023-01-01  │ 2023-08-15 │FALSE │
-# MAGIC   └─────────────────────┘            │ abc1  │ Moderado    │ 2023-08-15  │ 2024-03-10 │FALSE │
-# MAGIC                                      │ abc1  │ Arrojado    │ 2024-03-10  │ 9999-12-31 │TRUE  │
-# MAGIC   Só o estado atual.                 └──────────────────────────────────────────────────────┘
+# MAGIC               
+# MAGIC    hash   perfil                   hash   perfil       data_inicio  data_fim   atual 
+# MAGIC    abc1   Arrojado                 abc1   Conservador  2023-01-01   2023-08-15 FALSE 
+# MAGIC                abc1   Moderado     2023-08-15   2024-03-10 FALSE 
+# MAGIC                                       abc1   Arrojado     2024-03-10   9999-12-31 TRUE  
+# MAGIC   Só o estado atual.                 
 # MAGIC   Sem auditoria.                     Histórico completo. Auditável.
 # MAGIC ```
 # MAGIC
@@ -903,7 +903,7 @@ SELECT
     total_nulos,
     total_duplicatas,
     CASE
-        WHEN qualidade_pct < 95  THEN '🔴 CRÍTICO'
+        WHEN qualidade_pct < 95  THEN ' CRÍTICO'
         WHEN qualidade_pct < 99  THEN '🟡 ATENÇÃO'
         WHEN total_duplicatas > 0 THEN '🟡 ATENÇÃO'
         ELSE                          '🟢 OK'
@@ -970,29 +970,29 @@ DESCRIBE HISTORY case_santander.silver.acoes LIMIT 5;
 # COMMAND ----------
 # MAGIC %md
 # MAGIC ```
-# MAGIC ┌──────────────────────────────────────────────────────────────────────────────────┐
-# MAGIC │  PIPELINE CI/CD — GITHUB ACTIONS                                                │
-# MAGIC │                                                                                  │
-# MAGIC │  PULL REQUEST (qualquer branch)                                                  │
-# MAGIC │  quality gate ──────────────────────────────────────────────────► bloqueia PR   │
-# MAGIC │  (ruff + black + isort)          se falhar →                                    │
-# MAGIC │         │ (se OK)                                                                │
-# MAGIC │         ▼                                                                        │
-# MAGIC │  test ─────────────────────────────────────────────────────────► cobertura     │
-# MAGIC │  (pytest + cov) + security (bandit + safety)  → Step Summary                   │
-# MAGIC │                                                                                  │
-# MAGIC │  MERGE → develop                                                                 │
-# MAGIC │  quality → test + security → build (Docker) → deploy-dev → notify Slack        │
-# MAGIC │                                                ↑ automático                     │
-# MAGIC │                                                                                  │
-# MAGIC │  MERGE → main                                                                    │
-# MAGIC │  quality → test + security → build → deploy-hk → [APROVAÇÃO MANUAL] → deploy-prod │
-# MAGIC │                                                        ↑                         │
-# MAGIC │                            Settings > Environments > prod > Required Reviewers  │
-# MAGIC │                                                                        │         │
-# MAGIC │                                                               GitHub Release +  │
-# MAGIC │                                                               Notificação Slack │
-# MAGIC └──────────────────────────────────────────────────────────────────────────────────┘
+# MAGIC 
+# MAGIC   PIPELINE CI/CD — GITHUB ACTIONS                                                
+# MAGIC                                                                                   
+# MAGIC   PULL REQUEST (qualquer branch)                                                  
+# MAGIC   quality gate  bloqueia PR   
+# MAGIC   (ruff + black + isort)          se falhar →                                    
+# MAGIC           (se OK)                                                                
+# MAGIC                                                                                  
+# MAGIC   test  cobertura     
+# MAGIC   (pytest + cov) + security (bandit + safety)  → Step Summary                   
+# MAGIC                                                                                   
+# MAGIC   MERGE → develop                                                                 
+# MAGIC   quality → test + security → build (Docker) → deploy-dev → notify Slack        
+# MAGIC                                                 ↑ automático                     
+# MAGIC                                                                                   
+# MAGIC   MERGE → main                                                                    
+# MAGIC   quality → test + security → build → deploy-hk → [APROVAÇÃO MANUAL] → deploy-prod 
+# MAGIC                                                         ↑                         
+# MAGIC                             Settings > Environments > prod > Required Reviewers  
+# MAGIC                                                                                  
+# MAGIC                                                                GitHub Release +  
+# MAGIC                                                                Notificação Slack 
+# MAGIC 
 # MAGIC ```
 # MAGIC
 # MAGIC **Destaques de segurança no CI:**
@@ -1010,39 +1010,39 @@ DESCRIBE HISTORY case_santander.silver.acoes LIMIT 5;
 # COMMAND ----------
 # MAGIC %md
 # MAGIC ```
-# MAGIC t0_unity_catalog ──────────────────────────────────────────────────┐
-# MAGIC  (schemas + Liquid Clustering + CDC)                               │
-# MAGIC                                                                    ▼
-# MAGIC t1_extracao ─────────────────────────────────────────────► t2_silver ──────────┐
-# MAGIC (Yahoo + BCB + WorldBank)                                                       │
-# MAGIC                                                                                 │
-# MAGIC t5_streaming ────────────────────────────────────────────►                     │
-# MAGIC (Auto Loader + Event Hub)                                                       ▼
+# MAGIC t0_unity_catalog 
+# MAGIC  (schemas + Liquid Clustering + CDC)                               
+# MAGIC                                                                    
+# MAGIC t1_extracao  t2_silver 
+# MAGIC (Yahoo + BCB + WorldBank)                                                       
+# MAGIC                                                                                 
+# MAGIC t5_streaming                      
+# MAGIC (Auto Loader + Event Hub)                                                       
 # MAGIC                                                                    t7_corretora_analises
-# MAGIC t6_clientes_ordens ──────────────────────────────────────►         (posição + score
+# MAGIC t6_clientes_ordens          (posição + score
 # MAGIC (Kaggle + LGPD + Ordens simuladas)                                  + perfil + SQL)
-# MAGIC                                                                                 │
-# MAGIC                                                                                 ▼
+# MAGIC                                                                                 
+# MAGIC                                                                                 
 # MAGIC                                                                         t9_scd
 # MAGIC                                                                   (SCD Type 2:
 # MAGIC                                                                    clientes + score)
-# MAGIC                                                                                 │
-# MAGIC                                                                                 ▼
+# MAGIC                                                                                 
+# MAGIC                                                                                 
 # MAGIC                                                                         t3_gold
 # MAGIC                                                                   (anomalias + perf
 # MAGIC                                                                    + fraude batch)
-# MAGIC                                                                                 │
-# MAGIC                                                                                 ▼
+# MAGIC                                                                                 
+# MAGIC                                                                                 
 # MAGIC                                                                   t10_streaming_gold
 # MAGIC                                                                   (fraude RT + anomalia
 # MAGIC                                                                    intraday + vol + rank)
-# MAGIC                                                                          │
-# MAGIC                                                              ┌───────────┴──────────┐
-# MAGIC                                                              ▼                      ▼
+# MAGIC                                                                          
+# MAGIC                                                              
+# MAGIC                                                                                    
 # MAGIC                                                      t8_lakehouse_monitor     t_carga_sql
 # MAGIC                                                      (14 tabelas)             (Azure SQL)
-# MAGIC                                                              └───────────┬──────────┘
-# MAGIC                                                                          ▼
+# MAGIC                                                              
+# MAGIC                                                                          
 # MAGIC                                                                t4_observabilidade
 # MAGIC                                                           (qualidade + OPTIMIZE + VACUUM)
 # MAGIC
@@ -1057,7 +1057,7 @@ DESCRIBE HISTORY case_santander.silver.acoes LIMIT 5;
 
 print("""
 APACHE AIRFLOW — Por que dois orquestradores?
-─────────────────────────────────────────────
+
 
   Produção   → Databricks Workflow
               Nativo, gerenciado, auto-scaling, sem overhead operacional
@@ -1096,7 +1096,7 @@ Docker Compose (docker/docker-compose.prod.yml):
 
 print("""
 SEGURANÇA — Padrão adotado em src/config/settings.py
-─────────────────────────────────────────────────────
+
 
   # NUNCA hardcode de credenciais
   # Todos os segredos via Azure Key Vault + Secret Scope Databricks
@@ -1113,11 +1113,11 @@ SEGURANÇA — Padrão adotado em src/config/settings.py
                  client_id)
 
   Benefícios:
-    ✅ Rotação de chaves sem alterar código
-    ✅ Auditoria de acesso no Key Vault (quem acessou, quando, qual chave)
-    ✅ Permissões mínimas via RBAC Azure (princípio do menor privilégio)
-    ✅ Service Principal: sem senha humana no pipeline (não expira com saída de funcionário)
-    ✅ OAuth2 token com TTL curto (não persiste credencial em memória)
+     Rotação de chaves sem alterar código
+     Auditoria de acesso no Key Vault (quem acessou, quando, qual chave)
+     Permissões mínimas via RBAC Azure (princípio do menor privilégio)
+     Service Principal: sem senha humana no pipeline (não expira com saída de funcionário)
+     OAuth2 token com TTL curto (não persiste credencial em memória)
 """)
 
 # COMMAND ----------
@@ -1176,7 +1176,7 @@ ORDER BY CASE camada WHEN 'bronze' THEN 1 WHEN 'silver' THEN 2 ELSE 3 END;
 
 # COMMAND ----------
 # MAGIC %md
-# MAGIC ### 🔵 Arquitetura e Design
+# MAGIC ###  Arquitetura e Design
 
 # COMMAND ----------
 # MAGIC %md
@@ -1210,7 +1210,7 @@ ORDER BY CASE camada WHEN 'bronze' THEN 1 WHEN 'silver' THEN 2 ELSE 3 END;
 
 # COMMAND ----------
 # MAGIC %md
-# MAGIC ### 🔵 Performance e Otimização
+# MAGIC ###  Performance e Otimização
 
 # COMMAND ----------
 # MAGIC %md
@@ -1240,7 +1240,7 @@ ORDER BY CASE camada WHEN 'bronze' THEN 1 WHEN 'silver' THEN 2 ELSE 3 END;
 
 # COMMAND ----------
 # MAGIC %md
-# MAGIC ### 🔵 Streaming e Tempo Real
+# MAGIC ###  Streaming e Tempo Real
 
 # COMMAND ----------
 # MAGIC %md
@@ -1270,7 +1270,7 @@ ORDER BY CASE camada WHEN 'bronze' THEN 1 WHEN 'silver' THEN 2 ELSE 3 END;
 
 # COMMAND ----------
 # MAGIC %md
-# MAGIC ### 🔵 Conformidade e LGPD
+# MAGIC ###  Conformidade e LGPD
 
 # COMMAND ----------
 # MAGIC %md
@@ -1306,7 +1306,7 @@ ORDER BY CASE camada WHEN 'bronze' THEN 1 WHEN 'silver' THEN 2 ELSE 3 END;
 
 # COMMAND ----------
 # MAGIC %md
-# MAGIC ### 🔵 Design Aberto
+# MAGIC ###  Design Aberto
 
 # COMMAND ----------
 # MAGIC %md
@@ -1348,27 +1348,27 @@ ORDER BY CASE camada WHEN 'bronze' THEN 1 WHEN 'silver' THEN 2 ELSE 3 END;
 # COMMAND ----------
 
 print("""
-╔══════════════════════════════════════════════════════════════════════════════════╗
-║          CASE SANTANDER — COBERTURA TÉCNICA COMPLETA                           ║
-╠══════════════════════════════════════════════════════════════════════════════════╣
-║                                                                                  ║
-║  INGESTÃO               5 fontes: Yahoo Finance, BCB, WorldBank, Kaggle, Kafka  ║
-║  ARQUITETURA            Medallion (Bronze/Silver/Gold) + Unity Catalog           ║
-║  STREAMING              Auto Loader + Structured Streaming + CDC                 ║
-║  ANALYTICS              Z-Score, Score Ponderado 40/20/20/20, 4 Regras Fraude   ║
-║  SCD TYPE 2             MERGE Delta para auditoria regulatória de mudanças       ║
-║  OBSERVABILIDADE        Qualidade automatizada de 14 tabelas + Lakehouse Monitor ║
-║  ORQUESTRAÇÃO           Databricks Workflow (prod) + Airflow + Docker (dev)      ║
-║  CI/CD                  GitHub Actions: quality→security→test→build→deploy       ║
-║  SEGURANÇA              Azure Key Vault + Service Principal OAuth2               ║
-║  LGPD                   SHA-256 + mascaramento + retenção 30d Bronze             ║
-║  GOVERNANÇA             Unity Catalog + RBAC + comentários em tabelas            ║
-║  PERFORMANCE            Liquid Clustering + Broadcast Join + ZORDER              ║
-║                                                                                  ║
-║  TECNOLOGIAS:                                                                    ║
-║    Azure Databricks 15.4 LTS  · Apache Spark 3.5.0  · Delta Lake                ║
-║    Azure Event Hub (Kafka)    · ADLS Gen2            · Azure SQL Database        ║
-║    Apache Airflow             · Docker               · GitHub Actions            ║
-║    Unity Catalog              · Azure Key Vault      · Python 3.11               ║
-╚══════════════════════════════════════════════════════════════════════════════════╝
+
+          CASE SANTANDER — COBERTURA TÉCNICA COMPLETA                           
+
+                                                                                  
+  INGESTÃO               5 fontes: Yahoo Finance, BCB, WorldBank, Kaggle, Kafka  
+  ARQUITETURA            Medallion (Bronze/Silver/Gold) + Unity Catalog           
+  STREAMING              Auto Loader + Structured Streaming + CDC                 
+  ANALYTICS              Z-Score, Score Ponderado 40/20/20/20, 4 Regras Fraude   
+  SCD TYPE 2             MERGE Delta para auditoria regulatória de mudanças       
+  OBSERVABILIDADE        Qualidade automatizada de 14 tabelas + Lakehouse Monitor 
+  ORQUESTRAÇÃO           Databricks Workflow (prod) + Airflow + Docker (dev)      
+  CI/CD                  GitHub Actions: quality→security→test→build→deploy       
+  SEGURANÇA              Azure Key Vault + Service Principal OAuth2               
+  LGPD                   SHA-256 + mascaramento + retenção 30d Bronze             
+  GOVERNANÇA             Unity Catalog + RBAC + comentários em tabelas            
+  PERFORMANCE            Liquid Clustering + Broadcast Join + ZORDER              
+                                                                                  
+  TECNOLOGIAS:                                                                    
+    Azure Databricks 15.4 LTS  · Apache Spark 3.5.0  · Delta Lake                
+    Azure Event Hub (Kafka)    · ADLS Gen2            · Azure SQL Database        
+    Apache Airflow             · Docker               · GitHub Actions            
+    Unity Catalog              · Azure Key Vault      · Python 3.11               
+
 """)

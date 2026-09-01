@@ -1,0 +1,111 @@
+"""
+Producer: Event Hub Transações Financeiras
+Gera transações financeiras simuladas e envia para Azure Event Hub.
+
+Uso:
+    python scripts/eventhub_producer.py
+
+Dependências:
+    pip install azure-eventhub
+"""
+import json
+import random
+import time
+from datetime import datetime, timedelta
+from azure.eventhub import EventHubProducerClient, EventData
+
+# Configurações
+EVENT_HUB_CONNECTION_STR = "YOUR_EVENT_HUB_CONNECTION_STRING"
+EVENT_HUB_NAME = "transacoes-financeiras"
+
+# Tickers disponíveis
+TICKERS = [
+    "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "BBAS3.SA",
+    "WEGE3.SA", "RENT3.SA", "MGLU3.SA", "B3SA3.SA", "HAPV3.SA"
+]
+
+# Corretoras
+CORRETORAS = [
+    "Santander", "Itau", "BTG", "XP", "Rico", "NuInvest"
+]
+
+# Tipos de transação
+TIPOS = ["compra", "venda"]
+
+
+def gerar_transacao():
+    """Gera uma transação financeira simulada"""
+    ticker = random.choice(TICKERS)
+    # Preço base por ticker (simulado)
+    precos_base = {
+        "PETR4.SA": 35.0, "VALE3.SA": 65.0, "ITUB4.SA": 32.0,
+        "BBDC4.SA": 45.0, "BBAS3.SA": 28.0, "WEGE3.SA": 180.0,
+        "RENT3.SA": 55.0, "MGLU3.SA": 2.5, "B3SA3.SA": 12.0, "HAPV3.SA": 15.0
+    }
+    
+    preco_base = precos_base.get(ticker, 50.0)
+    # Variação de +/- 5%
+    preco = round(preco_base * random.uniform(0.95, 1.05), 2)
+    
+    quantidade = random.randint(100, 10000)
+    tipo = random.choice(TIPOS)
+    corretora = random.choice(CORRETORAS)
+    
+    transacao = {
+        "timestamp": datetime.now().isoformat(),
+        "ticker": ticker,
+        "preco": preco,
+        "quantidade": quantidade,
+        "tipo": tipo,
+        "corretora": corretora,
+        "id_transacao": f"{ticker}-{int(time.time() * 1000)}-{random.randint(1000, 9999)}"
+    }
+    
+    return transacao
+
+
+def enviar_para_eventhub(transacao, producer):
+    """Envia transação para o Event Hub"""
+    event_data = EventData(json.dumps(transacao))
+    producer.send_batch([event_data])
+
+
+def main():
+    """Função principal"""
+    print("=== Event Hub Producer Iniciado ===")
+    print(f"Event Hub: {EVENT_HUB_NAME}")
+    print("Gerando transações financeiras simuladas...")
+    print("Pressione Ctrl+C para parar")
+    
+    # Criar producer
+    producer = EventHubProducerClient.from_connection_string(
+        EVENT_HUB_CONNECTION_STR,
+        EVENT_HUB_NAME
+    )
+    
+    try:
+        contador = 0
+        while True:
+            # Gerar transação
+            transacao = gerar_transacao()
+            
+            # Enviar para Event Hub
+            enviar_para_eventhub(transacao, producer)
+            
+            contador += 1
+            print(f"[{contador}] Enviado: {transacao['ticker']} - {transacao['tipo']} - R$ {transacao['valor_total'] if 'valor_total' in transacao else transacao['preco'] * transacao['quantidade']:.2f}")
+            
+            # Aguardar entre transações (1-5 segundos)
+            time.sleep(random.uniform(1, 5))
+            
+    except KeyboardInterrupt:
+        print("\n=== Producer encerrado pelo usuário ===")
+    except Exception as e:
+        print(f"Erro: {e}")
+    finally:
+        producer.close()
+        print(f"Total de transações enviadas: {contador}")
+
+
+if __name__ == "__main__":
+    main()

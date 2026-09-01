@@ -1,0 +1,909 @@
+bundle:
+  name: case-santander-data
+  version: "1.0.0"
+  description: "Pipeline de dados financeiros - Corretora Santander (Job Clusters)"
+
+environments:
+  hk:
+    workspace:
+      host: ${env.DATABRICKS_HOST_HK}
+      root_path: /Workspace/Shared/bundles/case-santander-hk
+    variables:
+      environment: hk
+      enable_streaming: false
+      spark_version: "14.3.x-scala2.12"
+      gold_workers: 2
+      sql_workers: 1
+
+  prod:
+    workspace:
+      host: ${env.DATABRICKS_HOST_PROD}
+      root_path: /Workspace/Shared/bundles/case-santander-prod
+    variables:
+      environment: prod
+      enable_streaming: true
+      spark_version: "14.3.x-scala2.12"
+      gold_workers: 4
+      sql_workers: 2
+
+variables:
+  spark_version:
+    description: "Versão do Spark para job clusters"
+    default: "14.3.x-scala2.12"
+
+  gold_workers:
+    description: "Número de workers para jobs de análise (gold)"
+    default: 2
+
+  sql_workers:
+    description: "Número de workers para jobs de carga SQL"
+    default: 1
+
+  environment:
+    description: "Ambiente de execução (hk/prod)"
+    default: "hk"
+
+  enable_streaming:
+    description: "Habilita processamento de streaming"
+    default: false
+
+resources:
+  #  DATABRICKS REPOS (Git Sync) 
+  repos:
+    case_santander_main:
+      url: "https://github.com/thediegoaccount/case-santander-data-master"
+      branch: "main"
+      path: /Repos/diego.silva0001@gmail.com/case-santander-data-master
+
+  #  JOBS: GOLD MARKET ANALYSIS (Jobs Individuais - Sem Schedule) 
+  # Nota: Jobs individuais sem schedule - controlados pelo workflow pai
+  jobs:
+    t3_gold_anomalias:
+      name: "[${var.environment}] t3 - Gold Anomalias"
+      description: "Detecta anomalias em movimentação de ações via z-score"
+      tags:
+        team: data-engineering
+        layer: gold
+        source: yahoo-finance
+        cluster_type: job
+
+      tasks:
+        - task_key: anomalias
+          python_wheel_task:
+            package_name: case_santander
+            entry_point: jobs.job_gold_anomalias
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: "i3.xlarge"
+            num_workers: ${var.gold_workers}
+            aws_attributes:
+              availability: "SPOT"
+              zone_id: "us-west-2a"
+            idle_timeout_minutes: 15
+            spark_conf:
+              "spark.databricks.delta.schema.autoMerge.enabled": "true"
+          timeout_seconds: 3600
+          max_retries: 2
+          retry_on_timeout: false
+
+    t3_gold_performance:
+      name: "[${var.environment}] t3 - Gold Performance Ações"
+      description: "Calcula performance média das ações por setor e ano"
+      tags:
+        team: data-engineering
+        layer: gold
+        source: yahoo-finance
+        cluster_type: job
+
+      tasks:
+        - task_key: performance
+          python_wheel_task:
+            package_name: case_santander
+            entry_point: jobs.job_gold_performance
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: "i3.xlarge"
+            num_workers: ${var.gold_workers}
+            aws_attributes:
+              availability: "SPOT"
+              zone_id: "us-west-2a"
+            idle_timeout_minutes: 15
+            spark_conf:
+              "spark.databricks.delta.schema.autoMerge.enabled": "true"
+          timeout_seconds: 3600
+          max_retries: 2
+
+    t3_gold_bcb:
+      name: "[${var.environment}] t3 - Gold BCB Indicadores"
+      description: "Análise de Selic, Câmbio USD/BRL e IPCA do Banco Central"
+      tags:
+        team: data-engineering
+        layer: gold
+        source: bcb-api
+        cluster_type: job
+
+      tasks:
+        - task_key: bcb
+          python_wheel_task:
+            package_name: case_santander
+            entry_point: jobs.job_gold_bcb
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: "i3.xlarge"
+            num_workers: ${var.gold_workers}
+            aws_attributes:
+              availability: "SPOT"
+              zone_id: "us-west-2a"
+            idle_timeout_minutes: 15
+            spark_conf:
+              "spark.databricks.delta.schema.autoMerge.enabled": "true"
+          timeout_seconds: 3600
+          max_retries: 2
+
+    t3_gold_world_bank:
+      name: "[${var.environment}] t3 - Gold World Bank Contexto"
+      description: "Análise macroeconômica: PIB e Desemprego"
+      tags:
+        team: data-engineering
+        layer: gold
+        source: world-bank-api
+        cluster_type: job
+
+      tasks:
+        - task_key: world_bank
+          python_wheel_task:
+            package_name: case_santander
+            entry_point: jobs.job_gold_world_bank
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: "i3.xlarge"
+            num_workers: ${var.gold_workers}
+            aws_attributes:
+              availability: "SPOT"
+              zone_id: "us-west-2a"
+            idle_timeout_minutes: 15
+            spark_conf:
+              "spark.databricks.delta.schema.autoMerge.enabled": "true"
+          timeout_seconds: 3600
+          max_retries: 2
+
+    t3_gold_acoes_cambio:
+      name: "[${var.environment}] t3 - Gold Ações vs Câmbio"
+      description: "Correlação entre performance de ações e variações do câmbio USD/BRL"
+      tags:
+        team: data-engineering
+        layer: gold
+        source: multi
+        cluster_type: job
+
+      tasks:
+        - task_key: acoes_cambio
+          python_wheel_task:
+            package_name: case_santander
+            entry_point: jobs.job_gold_acoes_vs_cambio
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: "i3.xlarge"
+            num_workers: ${var.gold_workers}
+            aws_attributes:
+              availability: "SPOT"
+              zone_id: "us-west-2a"
+            idle_timeout_minutes: 15
+            spark_conf:
+              "spark.databricks.delta.schema.autoMerge.enabled": "true"
+          timeout_seconds: 3600
+          max_retries: 2
+
+    t3_gold_fraude:
+      name: "[${var.environment}] t3 - Gold Fraude"
+      description: "Detecção de fraudes em ordens de clientes"
+      tags:
+        team: data-engineering
+        layer: gold
+        source: clientes
+        cluster_type: job
+
+      tasks:
+        - task_key: fraude
+          python_wheel_task:
+            package_name: case_santander
+            entry_point: jobs.job_gold_fraude
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: "i3.xlarge"
+            num_workers: ${var.gold_workers}
+            aws_attributes:
+              availability: "SPOT"
+              zone_id: "us-west-2a"
+            idle_timeout_minutes: 15
+            spark_conf:
+              "spark.databricks.delta.schema.autoMerge.enabled": "true"
+          timeout_seconds: 3600
+          max_retries: 2
+
+  #  JOBS: CARGA SQL 
+    t_carga_sql_acoes:
+      name: "[${var.environment}] Carga SQL - Ações"
+      description: "Carrega performance_acoes e anomalias no SQL Database"
+      tags:
+        team: data-engineering
+        layer: sql
+        target: azure-sql
+        cluster_type: job
+
+      tasks:
+        - task_key: sql_acoes
+          python_wheel_task:
+            package_name: case_santander
+            entry_point: jobs.job_carga_sql_acoes
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: "i3.xlarge"
+            num_workers: ${var.sql_workers}
+            aws_attributes:
+              availability: "SPOT"
+              zone_id: "us-west-2a"
+            idle_timeout_minutes: 10
+            spark_conf:
+              "spark.sql.shuffle.partitions": "100"
+          timeout_seconds: 1800
+          max_retries: 2
+
+    t_carga_sql_clientes:
+      name: "[${var.environment}] Carga SQL - Clientes"
+      description: "Carrega 5 tabelas de análise de clientes"
+      tags:
+        team: data-engineering
+        layer: sql
+        target: azure-sql
+        cluster_type: job
+
+      tasks:
+        - task_key: sql_clientes
+          python_wheel_task:
+            package_name: case_santander
+            entry_point: jobs.job_carga_sql_clientes
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: "i3.xlarge"
+            num_workers: ${var.sql_workers}
+            aws_attributes:
+              availability: "SPOT"
+              zone_id: "us-west-2a"
+            idle_timeout_minutes: 10
+            spark_conf:
+              "spark.sql.shuffle.partitions": "100"
+          timeout_seconds: 1800
+          max_retries: 2
+
+    t_carga_sql_fraude:
+      name: "[${var.environment}] Carga SQL - Fraude"
+      description: "Carrega deteccao_fraude"
+      tags:
+        team: data-engineering
+        layer: sql
+        target: azure-sql
+        cluster_type: job
+
+      tasks:
+        - task_key: sql_fraude
+          python_wheel_task:
+            package_name: case_santander
+            entry_point: jobs.job_carga_sql_fraude
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: "i3.xlarge"
+            num_workers: ${var.sql_workers}
+            aws_attributes:
+              availability: "SPOT"
+              zone_id: "us-west-2a"
+            idle_timeout_minutes: 10
+            spark_conf:
+              "spark.sql.shuffle.partitions": "100"
+          timeout_seconds: 1800
+          max_retries: 2
+
+    t_carga_sql_streaming:
+      name: "[${var.environment}] Carga SQL - Streaming"
+      description: "Carrega 4 tabelas de análise real-time"
+      tags:
+        team: data-engineering
+        layer: sql
+        target: azure-sql
+        cluster_type: job
+
+      tasks:
+        - task_key: sql_streaming
+          python_wheel_task:
+            package_name: case_santander
+            entry_point: jobs.job_carga_sql_streaming
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: "i3.xlarge"
+            num_workers: ${var.sql_workers}
+            aws_attributes:
+              availability: "SPOT"
+              zone_id: "us-west-2a"
+            idle_timeout_minutes: 10
+            spark_conf:
+              "spark.sql.shuffle.partitions": "100"
+          timeout_seconds: 1800
+          max_retries: 2
+
+    t_carga_sql_macro:
+      name: "[${var.environment}] Carga SQL - Indicadores Macro"
+      description: "Carrega indicadores BCB, contexto macroeconômico e correlações"
+      tags:
+        team: data-engineering
+        layer: sql
+        target: azure-sql
+        cluster_type: job
+
+      tasks:
+        - task_key: sql_macro
+          python_wheel_task:
+            package_name: case_santander
+            entry_point: jobs.job_carga_sql_macro
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: "i3.xlarge"
+            num_workers: ${var.sql_workers}
+            aws_attributes:
+              availability: "SPOT"
+              zone_id: "us-west-2a"
+            idle_timeout_minutes: 10
+            spark_conf:
+              "spark.sql.shuffle.partitions": "100"
+          timeout_seconds: 1800
+          max_retries: 2
+
+    #  STREAMING CONTÍNUO (Serviço 24/7 - Independente do pipeline diário)
+    streaming_continuous:
+      name: "[${var.environment}] Streaming Contínuo"
+      description: "Serviço de streaming 24/7 - Aguarda atualizações do Event Hub"
+      tags:
+        team: data-engineering
+        layer: streaming
+        type: continuous-service
+        cluster_type: job
+
+      tasks:
+        - task_key: streaming_continuous
+          python_wheel_task:
+            package_name: case_santander
+            entry_point: jobs.job_streaming_continuous
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: "i3.xlarge"
+            num_workers: ${var.gold_workers}
+            aws_attributes:
+              availability: "SPOT"
+              zone_id: "us-west-2a"
+            idle_timeout_minutes: 15
+          timeout_seconds: 0  # Sem timeout (serviço contínuo)
+          max_retries: 0  # Sem retries (serviço contínuo)
+
+      # Sem schedule - roda como serviço contínuo
+      # Condicionado à variável enable_streaming
+
+    #  STREAMING TO GOLD (Agendado - Processa dados de streaming para Gold)
+    streaming_to_gold_continuous:
+      name: "[${var.environment}] Streaming to Gold (Agendado)"
+      description: "Processa dados de streaming para Gold a cada 5 minutos"
+      tags:
+        team: data-engineering
+        layer: gold
+        source: streaming
+        cluster_type: job
+
+      tasks:
+        - task_key: streaming_to_gold
+          python_wheel_task:
+            package_name: case_santander
+            entry_point: jobs.job_streaming_to_gold_continuous
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: "i3.xlarge"
+            num_workers: ${var.gold_workers}
+            aws_attributes:
+              availability: "SPOT"
+              zone_id: "us-west-2a"
+            idle_timeout_minutes: 15
+          timeout_seconds: 3600
+          max_retries: 2
+
+      schedule:
+        quartz_cron_expression: "0 */5 * * ?"  # A cada 5 minutos
+        timezone_id: "America/Sao_Paulo"
+        pause_status: UNPAUSED
+
+    #  WORKFLOW PAI: PIPELINE COMPLETO COM DEPENDÊNCIAS 
+    pipeline_completo:
+      name: "[${var.environment}] Pipeline Completo - Corretora Santander"
+      description: "Workflow pai com todas as dependências do pipeline"
+      tags:
+        team: data-engineering
+        layer: orchestration
+        type: master-workflow
+
+      tasks:
+      #  SETUP
+      - task_key: t0_unity_catalog
+        description: "Setup Unity Catalog e schemas"
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_unity_catalog
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.gold_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 15
+        timeout_seconds: 1800
+        max_retries: 2
+
+      #  INGESTION (Paralelo) 
+      - task_key: t1_extracao_acoes
+        description: "Extração Yahoo Finance"
+        depends_on:
+          - task_key: t0_unity_catalog
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_extracao_acoes
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.gold_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 15
+        timeout_seconds: 3600
+        max_retries: 2
+
+      - task_key: t1_extracao_bcb
+        description: "Extração BCB API"
+        depends_on:
+          - task_key: t0_unity_catalog
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_extracao_bcb
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.gold_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 15
+        timeout_seconds: 3600
+        max_retries: 2
+
+      - task_key: t1_extracao_world_bank
+        description: "Extração World Bank API"
+        depends_on:
+          - task_key: t0_unity_catalog
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_extracao_world_bank
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.gold_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 15
+        timeout_seconds: 3600
+        max_retries: 2
+
+      - task_key: t6_clientes_ordens
+        description: "Clientes e Ordens Kaggle"
+        depends_on:
+          - task_key: t0_unity_catalog
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_clientes_ordens
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.gold_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 15
+        timeout_seconds: 3600
+        max_retries: 2
+
+      #  SILVER (Por Fonte) 
+      - task_key: t2_silver_acoes
+        description: "Transformação Silver Ações"
+        depends_on:
+          - task_key: t1_extracao_acoes
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_silver_acoes
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.gold_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 15
+        timeout_seconds: 3600
+        max_retries: 2
+
+      - task_key: t2_silver_bcb
+        description: "Transformação Silver BCB"
+        depends_on:
+          - task_key: t1_extracao_bcb
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_silver_bcb
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.gold_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 15
+        timeout_seconds: 3600
+        max_retries: 2
+
+      - task_key: t2_silver_world_bank
+        description: "Transformação Silver World Bank"
+        depends_on:
+          - task_key: t1_extracao_world_bank
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_silver_world_bank
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.gold_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 15
+        timeout_seconds: 3600
+        max_retries: 2
+
+      - task_key: t6_clientes_silver
+        description: "Transformação Silver Clientes"
+        depends_on:
+          - task_key: t6_clientes_ordens
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_clientes_silver
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.gold_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 15
+        timeout_seconds: 3600
+        max_retries: 2
+
+      #  GOLD MARKET (Paralelo)
+      - task_key: t3_anomalias
+        description: "Gold Anomalias"
+        depends_on:
+          - task_key: t2_silver_acoes
+          - task_key: t2_silver_bcb
+          - task_key: t2_silver_world_bank
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_gold_anomalias
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.gold_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 15
+        timeout_seconds: 3600
+        max_retries: 2
+
+      - task_key: t3_performance
+        description: "Gold Performance"
+        depends_on:
+          - task_key: t2_silver_acoes
+          - task_key: t2_silver_bcb
+          - task_key: t2_silver_world_bank
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_gold_performance
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.gold_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 15
+        timeout_seconds: 3600
+        max_retries: 2
+
+      - task_key: t3_bcb
+        description: "Gold BCB"
+        depends_on:
+          - task_key: t2_silver_acoes
+          - task_key: t2_silver_bcb
+          - task_key: t2_silver_world_bank
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_gold_bcb
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.gold_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 15
+        timeout_seconds: 3600
+        max_retries: 2
+
+      - task_key: t3_world_bank
+        description: "Gold World Bank"
+        depends_on:
+          - task_key: t2_silver_acoes
+          - task_key: t2_silver_bcb
+          - task_key: t2_silver_world_bank
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_gold_world_bank
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.gold_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 15
+        timeout_seconds: 3600
+        max_retries: 2
+
+      - task_key: t3_acoes_cambio
+        description: "Gold Ações vs Câmbio"
+        depends_on:
+          - task_key: t3_performance
+          - task_key: t3_bcb
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_gold_acoes_vs_cambio
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.gold_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 15
+        timeout_seconds: 3600
+        max_retries: 2
+
+      #  GOLD CLIENT (Sequencial)
+      - task_key: t7_corretora_analises
+        description: "Corretora Análises"
+        depends_on:
+          - task_key: t6_clientes_silver
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_corretora_analises
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.gold_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 15
+        timeout_seconds: 3600
+        max_retries: 2
+
+      - task_key: t9_scd
+        description: "SCD Type 2"
+        depends_on:
+          - task_key: t7_corretora_analises
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_scd
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.gold_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 15
+        timeout_seconds: 3600
+        max_retries: 2
+
+      - task_key: t3_fraude
+        description: "Gold Fraude"
+        depends_on:
+          - task_key: t9_scd
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_gold_fraude
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.gold_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 15
+        timeout_seconds: 3600
+        max_retries: 2
+
+      #  CARGA SQL (Paralelo)
+      - task_key: t_sql_acoes
+        description: "Carga SQL Ações"
+        depends_on:
+          - task_key: t3_anomalias
+          - task_key: t3_acoes_cambio
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_carga_sql_acoes
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.sql_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 10
+          spark_conf:
+            "spark.sql.shuffle.partitions": "100"
+        timeout_seconds: 1800
+        max_retries: 2
+
+      - task_key: t_sql_fraude
+        description: "Carga SQL Fraude"
+        depends_on:
+          - task_key: t3_fraude
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_carga_sql_fraude
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.sql_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 10
+          spark_conf:
+            "spark.sql.shuffle.partitions": "100"
+        timeout_seconds: 1800
+        max_retries: 2
+
+      - task_key: t_sql_clientes
+        description: "Carga SQL Clientes"
+        depends_on:
+          - task_key: t7_corretora_analises
+          - task_key: t9_scd
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_carga_sql_clientes
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.sql_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 10
+          spark_conf:
+            "spark.sql.shuffle.partitions": "100"
+        timeout_seconds: 1800
+        max_retries: 2
+
+      - task_key: t_sql_macro
+        description: "Carga SQL Macro"
+        depends_on:
+          - task_key: t3_bcb
+          - task_key: t3_world_bank
+          - task_key: t3_acoes_cambio
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_carga_sql_macro
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.sql_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 10
+          spark_conf:
+            "spark.sql.shuffle.partitions": "100"
+        timeout_seconds: 1800
+        max_retries: 2
+
+      #  FINALIZAÇÃO
+      - task_key: t8_lakehouse_monitoring
+        description: "Lakehouse Monitoring"
+        depends_on:
+          - task_key: t_sql_acoes
+          - task_key: t_sql_clientes
+          - task_key: t_sql_fraude
+          - task_key: t_sql_streaming
+          - task_key: t_sql_macro
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_lakehouse_monitoring
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.sql_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 10
+        timeout_seconds: 3600
+        max_retries: 2
+
+      - task_key: t4_observabilidade
+        description: "Observabilidade"
+        depends_on:
+          - task_key: t_sql_acoes
+          - task_key: t_sql_clientes
+          - task_key: t_sql_fraude
+          - task_key: t_sql_streaming
+          - task_key: t_sql_macro
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_observabilidade
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.sql_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 10
+        timeout_seconds: 3600
+        max_retries: 2
+
+    # Schedule único para o workflow pai
+    schedule:
+      quartz_cron_expression: "0 6 * * ?"  # 06:00 BRT todo dia
+      timezone_id: "America/Sao_Paulo"
+      pause_status: UNPAUSED
+
+targets:
+  # Ambiente de Homologação (Job Clusters - Menores)
+  hk:
+    mode: development
+    variables:
+      spark_version: "14.3.x-scala2.12"
+      gold_workers: 2
+      sql_workers: 1
+      environment: hk
+      enable_streaming: false
+    workspace:
+      host: ${env.DATABRICKS_HOST_HK}
+      root_path: /Workspace/Shared/bundles/case-santander-hk
+
+  # Ambiente de Produção (Job Clusters - Maiores)
+  prod:
+    mode: production
+    variables:
+      spark_version: "14.3.x-scala2.12"
+      gold_workers: 4
+      sql_workers: 2
+      environment: prod
+      enable_streaming: true
+    workspace:
+      host: ${env.DATABRICKS_HOST_PROD}
+      root_path: /Workspace/Shared/bundles/case-santander-prod

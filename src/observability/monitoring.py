@@ -97,8 +97,8 @@ def executar_monitoramento(spark: SparkSession, storage_account: str = None) -> 
         m = monitorar_tabela(spark, tabela)
         if m:
             resultados.append(m)
-            print(f"  ✅ {tabela} — {m['total_registros']} registros — qualidade {m['qualidade_pct']}%")
+            print(f"   {tabela} — {m['total_registros']} registros — qualidade {m['qualidade_pct']}%")
         else:
-            print(f"  ❌ {tabela} — erro ou sem dados")
+            print(f"   {tabela} — erro ou sem dados")
 
     return resultados

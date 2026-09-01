@@ -1,0 +1,57 @@
+{
+  "dashboard": {
+    "title": "Santander Streaming Monitor",
+    "panels": [
+      {
+        "title": "Streaming Jobs - Running Status",
+        "type": "stat",
+        "targets": [
+          {
+            "query": "SELECT COUNT(*) FROM task_instance WHERE task_id LIKE '%streaming%' AND state = 'running'",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "title": "Streaming Jobs - Failures (Last 24h)",
+        "type": "stat",
+        "targets": [
+          {
+            "query": "SELECT COUNT(*) FROM task_instance WHERE task_id LIKE '%streaming%' AND state = 'failed' AND execution_date >= NOW() - INTERVAL '24 hours'",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "title": "Streaming Jobs - Success Rate (%)",
+        "type": "gauge",
+        "targets": [
+          {
+            "query": "SELECT ROUND(100.0 * SUM(CASE WHEN state = 'success' THEN 1 ELSE 0 END) / COUNT(*), 2) as success_rate FROM task_instance WHERE task_id LIKE '%streaming%' AND execution_date >= NOW() - INTERVAL '24 hours'",
+            "refId": "C"
+          }
+        ]
+      },
+      {
+        "title": "Streaming Jobs - Latency (Minutes)",
+        "type": "graph",
+        "targets": [
+          {
+            "query": "SELECT task_id, AVG(EXTRACT(EPOCH FROM (end_date - start_date))) / 60 as avg_latency FROM task_instance WHERE task_id LIKE '%streaming%' AND execution_date >= NOW() - INTERVAL '24 hours' GROUP BY task_id",
+            "refId": "D"
+          }
+        ]
+      },
+      {
+        "title": "Streaming Jobs - Runs per Hour",
+        "type": "graph",
+        "targets": [
+          {
+            "query": "SELECT DATE_TRUNC('hour', execution_date) as hour, COUNT(*) as runs FROM task_instance WHERE task_id LIKE '%streaming%' AND execution_date >= NOW() - INTERVAL '24 hours' GROUP BY hour ORDER BY hour",
+            "refId": "E"
+          }
+        ]
+      }
+    ]
+  }
+}

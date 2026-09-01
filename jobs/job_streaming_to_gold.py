@@ -17,13 +17,16 @@ Ou via Databricks Workflow:
 """
 
 import sys
+from src.config.environment import setup_python_path
 
-sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
+setup_python_path()
+from src.config.logging import info, error, warning
 
 from datetime import datetime
 
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
+from src.config.secrets import get_secret
 
 from src.config.settings import configure_adls
 from src.gold.streaming_gold import (
@@ -36,14 +39,14 @@ from src.gold.streaming_gold import (
 
 def main():
     inicio = datetime.now()
-    print(f"=== JOB STREAMING TO GOLD INICIADO: {inicio} ===")
+    info("job_streaming_to_gold", f"=== JOB STREAMING TO GOLD INICIADO: {inicio} ===")
 
     spark = DatabricksSession.builder.getOrCreate()
 
-    client_id = dbutils.secrets.get(scope="kv-case-santander", key="client-id")
-    tenant_id = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
-    client_secret = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
-    storage_account = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
+    client_id = get_secret("client-id")
+    tenant_id = get_secret("tenant-id")
+    client_secret = get_secret("client-secret")
+    storage_account = get_secret("storage-account")
 
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
 
@@ -71,38 +74,38 @@ def main():
         # fmt: on
 
         total_streaming = df_cdf.count()
-        print(f"CDC ativo: {total_streaming} novas transacoes desde versao {ultima_versao}")
+        info("job_streaming_to_gold", f"CDC ativo: {total_streaming} novas transacoes desde versao {ultima_versao}")
 
     except Exception:
         # Fallback: leitura completa se CDF ainda nao estiver habilitado
         df_cdf = None
         _row = spark.sql("SELECT COUNT(*) as total FROM case_santander.silver.streaming").collect()[0]
         total_streaming = _row["total"]
-        print(f"CDC indisponivel — leitura completa: {total_streaming} transacoes")
+        info("job_streaming_to_gold", f"CDC indisponivel — leitura completa: {total_streaming} transacoes")
 
     if total_streaming == 0:
-        print("Nenhuma transacao nova encontrada. Job encerrado.")
+        info("job_streaming_to_gold", "Nenhuma transacao nova encontrada. Job encerrado.")
         return
 
     # GOLD 1 — Fraude em transacoes streaming
     total_critico = detectar_fraude_streaming(spark)
-    print(f"✅ gold.fraude_streaming → {total_critico} transacoes criticas")
+    info("job_streaming_to_gold", f" gold.fraude_streaming → {total_critico} transacoes criticas")
 
     # GOLD 2 — Anomalias intradiarias de preco
     total_anomalias = detectar_anomalias_intraday(spark)
-    print(f"✅ gold.anomalias_intraday → {total_anomalias} anomalias detectadas")
+    info("job_streaming_to_gold", f" gold.anomalias_intraday → {total_anomalias} anomalias detectadas")
 
     # GOLD 3 — Volume intraday por ticker e hora
     total_vol = calcular_volume_intraday(spark)
-    print("✅ gold.volume_intraday gravado")
+    info("job_streaming_to_gold", " gold.volume_intraday gravado")
 
     # GOLD 4 — Ranking de ativos em tempo real
     total_rank = calcular_ranking_realtime(spark)
-    print(f"✅ gold.ranking_acoes_realtime → {total_rank} ativos")
+    info("job_streaming_to_gold", f" gold.ranking_acoes_realtime → {total_rank} ativos")
 
     fim = datetime.now()
-    print("\n=== JOB STREAMING TO GOLD CONCLUIDO ===")
-    print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
+    info("job_streaming_to_gold", "\n=== JOB STREAMING TO GOLD CONCLUIDO ===")
+    info("job_streaming_to_gold", f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
 
 main()

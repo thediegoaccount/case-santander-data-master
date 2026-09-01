@@ -1,0 +1,57 @@
+{
+  "dashboard": {
+    "title": "Databricks Jobs Performance",
+    "panels": [
+      {
+        "title": "Databricks Jobs - Avg Duration (Minutes)",
+        "type": "graph",
+        "targets": [
+          {
+            "query": "SELECT ti.task_id, AVG(EXTRACT(EPOCH FROM (ti.end_date - ti.start_date))) / 60 as avg_duration FROM task_instance ti JOIN dag_run dr ON ti.dag_id = dr.dag_id AND ti.execution_date = dr.execution_date WHERE ti.task_id LIKE '%databricks%' AND ti.execution_date >= NOW() - INTERVAL '24 hours' GROUP BY ti.task_id ORDER BY avg_duration DESC",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "title": "Databricks Jobs - Total Runs (Last 24h)",
+        "type": "stat",
+        "targets": [
+          {
+            "query": "SELECT COUNT(*) FROM task_instance WHERE task_id LIKE '%databricks%' AND execution_date >= NOW() - INTERVAL '24 hours'",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "title": "Databricks Jobs - Success Rate (%)",
+        "type": "gauge",
+        "targets": [
+          {
+            "query": "SELECT ROUND(100.0 * SUM(CASE WHEN state = 'success' THEN 1 ELSE 0 END) / COUNT(*), 2) as success_rate FROM task_instance WHERE task_id LIKE '%databricks%' AND execution_date >= NOW() - INTERVAL '24 hours'",
+            "refId": "C"
+          }
+        ]
+      },
+      {
+        "title": "Databricks Jobs - Failures by Task",
+        "type": "table",
+        "targets": [
+          {
+            "query": "SELECT task_id, COUNT(*) as failures FROM task_instance WHERE task_id LIKE '%databricks%' AND state = 'failed' AND execution_date >= NOW() - INTERVAL '24 hours' GROUP BY task_id ORDER BY failures DESC LIMIT 10",
+            "refId": "D"
+          }
+        ]
+      },
+      {
+        "title": "Databricks Jobs - Max Duration (Minutes)",
+        "type": "stat",
+        "targets": [
+          {
+            "query": "SELECT MAX(EXTRACT(EPOCH FROM (end_date - start_date))) / 60 as max_duration FROM task_instance WHERE task_id LIKE '%databricks%' AND execution_date >= NOW() - INTERVAL '24 hours'",
+            "refId": "E"
+          }
+        ]
+      }
+    ]
+  }
+}

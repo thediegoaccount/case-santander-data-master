@@ -43,34 +43,34 @@ dados em ambiente de nuvem Azure com Databricks
 ### Visão geral da solução
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        FONTES DE DADOS                              │
-│  Yahoo Finance │ BCB API │ World Bank │ Kaggle │ Azure Event Hub    │
-└──────────────────────────┬──────────────────────┬───────────────────┘
-                                 │ Batch (ADF 05:00)     │ Streaming (Kafka)
-                                 ▼                       ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    BRONZE — ADLS Gen2                               │
-│         Dados brutos · Parquet/Delta · Particionado por data        │
-└──────────────────────────────────────┬──────────────────────────────┘
-                                                │ Databricks Spark
-                                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    SILVER — Delta Lake                              │
-│    Limpeza · Tipagem · Enriquecimento · LGPD · SCD Type 2           │
-└──────────────────────────────────────┬──────────────────────────────┘
-                                                │ Spark SQL · Window Functions
-                                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                     GOLD — Delta Lake                               │
-│   Anomalias · Fraude · Score Risco · Carteira · Observabilidade     │
-└───────────────┬──────────────────────┬──────────────────────────────┘
-                    │                      │
-                    ▼                      ▼
-┌──────────────────────┐  ┌───────────────────────────────────────────┐
-│   Unity Catalog      │  │  Azure SQL Database · Dashboard · Genie AI│
-│   Governança · RBAC  │  │  Serving layer para consumo analítico      │
-└──────────────────────┘  └───────────────────────────────────────────┘
+
+                        FONTES DE DADOS                              
+  Yahoo Finance  BCB API  World Bank  Kaggle  Azure Event Hub    
+
+                                  Batch (ADF 05:00)      Streaming (Kafka)
+                                                        
+
+                    BRONZE — ADLS Gen2                               
+         Dados brutos · Parquet/Delta · Particionado por data        
+
+                                                 Databricks Spark
+                                                
+
+                    SILVER — Delta Lake                              
+    Limpeza · Tipagem · Enriquecimento · LGPD · SCD Type 2           
+
+                                                 Spark SQL · Window Functions
+                                                
+
+                     GOLD — Delta Lake                               
+   Anomalias · Fraude · Score Risco · Carteira · Observabilidade     
+
+                                          
+                                          
+  
+   Unity Catalog          Azure SQL Database · Dashboard · Genie AI
+   Governança · RBAC      Serving layer para consumo analítico      
+  
 ```
 
 ### Arquitetura técnica
@@ -126,37 +126,37 @@ dados em ambiente de nuvem Azure com Databricks
 
 ```text
 case_santander/
-├── bronze/
-│   ├── acoes        → 8.534 reg  · Parquet · Yahoo Finance
-│   ├── bcb          → 3.068 reg  · Delta   · BCB API
-│   ├── world_bank   →    59 reg  · Delta   · World Bank API
-│   ├── kafka        →   200 reg  · Delta   · Azure Event Hub
-│   ├── clientes     → 10.000 reg · Delta   · Kaggle (LGPD aplicada)
-│   └── ordens       →  5.341 reg · Delta   · Simulado Python
-├── silver/
-│   ├── acoes        → 8.530 reg  · variação%, empresa, setor
-│   ├── bcb          → 3.068 reg  · data tipada, 6 casas decimais
-│   ├── world_bank   →    59 reg  · ano int, mergeSchema
-│   ├── clientes     → 10.000 reg · faixa_etaria, score_categoria
-│   ├── clientes_scd → histórico  · SCD Type 2 (perfil_risco, score)
-│   ├── ordens       →  5.341 reg · data_ordem tipada
-│   └── streaming    →   200 reg  · alertas volume/preço (CDC habilitado)
-└── gold/
-     ├── anomalias              → 4.524 reg  · Z-Score por ticker
-     ├── performance_acoes      →    27 reg  · por setor/ano
-     ├── acoes_vs_cambio        → 4.507 reg  · cruzamento BCB
-     ├── posicao_clientes       → 3.931 reg  · P&L, situação
-     ├── score_risco_clientes   →  1.000 reg · score ponderado
-     ├── score_risco_scd        → histórico  · SCD Type 2
-     ├── deteccao_fraude        → 5.341 reg  · 4 regras, Normal→Crítico
-     ├── perfil_clientes        →    45 reg  · segmentação
-     ├── ordens_consolidadas    →   893 reg  · volume por ticker
-     ├── ranking_acoes_perfil   → variável
-     ├── fraude_streaming       → variável   · fraude em tempo real (via silver.streaming)
-     ├── anomalias_intraday     → variável   · Z-Score intraday (via silver.streaming)
-     ├── volume_intraday        → variável   · volume agregado por ticker/hora (via silver.streaming)
-     ├── ranking_acoes_realtime → variável   · ranking por volume em tempo real (via silver.streaming)
-     └── observabilidade        → crescente  · métricas de qualidade
+ bronze/
+    acoes        → 8.534 reg  · Parquet · Yahoo Finance
+    bcb          → 3.068 reg  · Delta   · BCB API
+    world_bank   →    59 reg  · Delta   · World Bank API
+    kafka        →   200 reg  · Delta   · Azure Event Hub
+    clientes     → 10.000 reg · Delta   · Kaggle (LGPD aplicada)
+    ordens       →  5.341 reg · Delta   · Simulado Python
+ silver/
+    acoes        → 8.530 reg  · variação%, empresa, setor
+    bcb          → 3.068 reg  · data tipada, 6 casas decimais
+    world_bank   →    59 reg  · ano int, mergeSchema
+    clientes     → 10.000 reg · faixa_etaria, score_categoria
+    clientes_scd → histórico  · SCD Type 2 (perfil_risco, score)
+    ordens       →  5.341 reg · data_ordem tipada
+    streaming    →   200 reg  · alertas volume/preço (CDC habilitado)
+ gold/
+      anomalias              → 4.524 reg  · Z-Score por ticker
+      performance_acoes      →    27 reg  · por setor/ano
+      acoes_vs_cambio        → 4.507 reg  · cruzamento BCB
+      posicao_clientes       → 3.931 reg  · P&L, situação
+      score_risco_clientes   →  1.000 reg · score ponderado
+      score_risco_scd        → histórico  · SCD Type 2
+      deteccao_fraude        → 5.341 reg  · 4 regras, Normal→Crítico
+      perfil_clientes        →    45 reg  · segmentação
+      ordens_consolidadas    →   893 reg  · volume por ticker
+      ranking_acoes_perfil   → variável
+      fraude_streaming       → variável   · fraude em tempo real (via silver.streaming)
+      anomalias_intraday     → variável   · Z-Score intraday (via silver.streaming)
+      volume_intraday        → variável   · volume agregado por ticker/hora (via silver.streaming)
+      ranking_acoes_realtime → variável   · ranking por volume em tempo real (via silver.streaming)
+      observabilidade        → crescente  · métricas de qualidade
 ```
 
 ## Fluxo de orquestração — Databricks Workflow
@@ -164,30 +164,30 @@ case_santander/
 Fluxo de orquestração — Databricks Workflow
 
 t0_unity_catalog_bronze
-             │
-             ▼
+             
+             
         t1_extracao
-          │     │           
-          ▼     ▼
+                          
+               
 t5_streaming  t6_clientes_ordens
 
-     │              │         │
-     ▼              ▼         ▼
+                            
+                            
   t2_silver    t2_silver  t7_corretora_analises
-                              │
-                              ▼
+                              
+                              
                            t9_scd              
-                    │         │
-                    ▼         ▼
+                             
+                             
                 t2_silver    t3_gold
-                              │
-                   ┌──────────┤
-                   ▼          ▼          
+                              
+                   
+                                       
              t8_lakehouse   t_sql
              _monitoring        
-                   │          │
-                   └────┬─────┘
-                        ▼
+                             
+                   
+                        
                   t4_observabilidade
 
 ## Orquestração — dois ambientes com papéis distintos
@@ -523,7 +523,9 @@ Padrão obrigatório em todos os jobs: cada jobs/*.py inicia com:
 
 ```python
 import sys
-sys.path.insert(0, "/Workspace/Users/<seu-email>/case-santander-data-master")
+# Setup do sys.path
+from src.config.environment import setup_python_path
+setup_python_path()
 ```
 
 ### 10. Executar o pipeline
@@ -636,54 +638,54 @@ O CI/CD dispara automaticamente a cada push nas branches develop (→ dev) e mai
 
 ```
 case-santander-data-master/
-├── .github/
-│   └── workflows/
-│       └── ci-cd.yml
-├── config/
-│   └── config.py
-├── dags/
-│   └── dag_pipeline_santander.py
-├── docs/
-│   ├── technical-reference.md
-│   └── unity-catalog.md
-├── docker/
-│   ├── Dockerfile
-│   └── docker-compose.yml
-├── jobs/
-│   ├── job_unity_catalog.py
-│   ├── job_extracao.py
-│   ├── job_streaming.py
-│   ├── job_clientes_ordens.py
-│   ├── job_silver.py
-│   ├── job_corretora_analises.py
-│   ├── job_scd.py
-│   ├── job_gold.py
-│   ├── job_lakehouse_monitoring.py
-│   ├── job_carga_sql.py
-│   └── job_observabilidade.py
-├── requirements-airflow.txt
-├── requirements.txt
-├── src/
-│   ├── config/
-│   │   └── settings.py
-│   ├── ingestion/
-│   │   ├── bcb.py
-│   │   ├── world_bank.py
-│   │   └── yahoo_finance.py
-│   ├── gold/
-│   │   ├── anomalias.py
-│   │   ├── fraude.py
-│   │   └── performance.py
-│   ├── clients/
-│   │   └── scd.py
-│   ├── observability/
-│   │   └── monitoring.py
-│   └── transformation/
-│       ├── silver_acoes.py
-│       ├── silver_bcb.py
-│       └── silver_world_bank.py
-└── tests/
-     └── test_pipeline.py
+ .github/
+    workflows/
+        ci-cd.yml
+ config/
+    config.py
+ dags/
+    dag_pipeline_santander.py
+ docs/
+    technical-reference.md
+    unity-catalog.md
+ docker/
+    Dockerfile
+    docker-compose.yml
+ jobs/
+    job_unity_catalog.py
+    job_extracao.py
+    job_streaming.py
+    job_clientes_ordens.py
+    job_silver.py
+    job_corretora_analises.py
+    job_scd.py
+    job_gold.py
+    job_lakehouse_monitoring.py
+    job_carga_sql.py
+    job_observabilidade.py
+ requirements-airflow.txt
+ requirements.txt
+ src/
+    config/
+       settings.py
+    ingestion/
+       bcb.py
+       world_bank.py
+       yahoo_finance.py
+    gold/
+       anomalias.py
+       fraude.py
+       performance.py
+    clients/
+       scd.py
+    observability/
+       monitoring.py
+    transformation/
+        silver_acoes.py
+        silver_bcb.py
+        silver_world_bank.py
+ tests/
+      test_pipeline.py
 
 ### Dependências
 

@@ -27,20 +27,20 @@
 
 ```
 BRONZE (Dados Brutos)
-  └── Parquet/Delta particionado por data de extração
-  └── Sem transformações — fidelidade total à fonte
-  └── Retenção: 30 dias (lifecycle policy ADLS)
+   Parquet/Delta particionado por data de extração
+   Sem transformações — fidelidade total à fonte
+   Retenção: 30 dias (lifecycle policy ADLS)
 
 SILVER (Dados Curados)
-  └── Delta Lake com schema validado e mergeSchema
-  └── Tipagem correta, nulos removidos, duplicatas eliminadas
-  └── Features derivadas (variação %, ano, mês, trimestre)
-  └── Particionamento otimizado para leitura
+   Delta Lake com schema validado e mergeSchema
+   Tipagem correta, nulos removidos, duplicatas eliminadas
+   Features derivadas (variação %, ano, mês, trimestre)
+   Particionamento otimizado para leitura
 
 GOLD (Dados Analíticos)
-  └── Delta Lake — tabelas de negócio
-  └── Agregações, scores, alertas, SCD Type 2
-  └── Prontas para consumo por dashboards, SQL e Genie AI
+   Delta Lake — tabelas de negócio
+   Agregações, scores, alertas, SCD Type 2
+   Prontas para consumo por dashboards, SQL e Genie AI
 ```
 
 ### Componentes de Plataforma
@@ -65,56 +65,56 @@ GOLD (Dados Analíticos)
 
 ```
 src/
-├── config/
-│   └── settings.py              # Configuração central: paths, credenciais, Spark
-├── ingestion/
-│   ├── yahoo_finance.py         # Extração de ações da B3 via yfinance
-│   ├── bcb.py                   # Extração de indicadores do Banco Central
-│   └── world_bank.py            # Extração de dados macroeconômicos
-├── transformation/
-│   ├── silver_acoes.py          # Bronze → Silver: ações
-│   ├── silver_bcb.py            # Bronze → Silver: indicadores BCB
-│   └── silver_world_bank.py     # Bronze → Silver: World Bank
-├── gold/
-│   ├── anomalias.py             # Detecção de anomalias por Z-Score (batch diário)
-│   ├── fraude.py                # Motor de detecção de fraudes batch (broadcast join)
-│   ├── performance.py           # Métricas de performance por ação/setor
-│   └── streaming_gold.py        # 4 tabelas Gold derivadas de silver.streaming
-├── clients/
-│   └── scd.py                   # Slowly Changing Dimensions Type 2
-├── observability/
-│   └── monitoring.py            # Qualidade de dados e alertas via Unity Catalog
-└── streaming/
-    └── __init__.py              # Placeholder streaming
+ config/
+    settings.py              # Configuração central: paths, credenciais, Spark
+ ingestion/
+    yahoo_finance.py         # Extração de ações da B3 via yfinance
+    bcb.py                   # Extração de indicadores do Banco Central
+    world_bank.py            # Extração de dados macroeconômicos
+ transformation/
+    silver_acoes.py          # Bronze → Silver: ações
+    silver_bcb.py            # Bronze → Silver: indicadores BCB
+    silver_world_bank.py     # Bronze → Silver: World Bank
+ gold/
+    anomalias.py             # Detecção de anomalias por Z-Score (batch diário)
+    fraude.py                # Motor de detecção de fraudes batch (broadcast join)
+    performance.py           # Métricas de performance por ação/setor
+    streaming_gold.py        # 4 tabelas Gold derivadas de silver.streaming
+ clients/
+    scd.py                   # Slowly Changing Dimensions Type 2
+ observability/
+    monitoring.py            # Qualidade de dados e alertas via Unity Catalog
+ streaming/
+     __init__.py              # Placeholder streaming
 
 jobs/
-├── job_unity_catalog.py         # t0 — Registra tabelas; Liquid Clustering; Delta CDF
-├── job_extracao_acoes.py        # t1_extracao_acoes — Ingestão de ações via Yahoo Finance
-├── job_extracao_bcb.py          # t1_extracao_bcb — Ingestão de indicadores do Banco Central
-├── job_extracao_world_bank.py   # t1_extracao_world_bank — Ingestão de dados do World Bank
-├── job_extracao.py              # t1 — Orquestra todas as ingestões (legado)
-├── job_clientes_ordens.py       # t6_clientes_ordens — Ingestão Kaggle + ordens simuladas
-├── job_clientes_silver.py       # t6_clientes_silver — Bronze → Silver de clientes/ordens
-├── job_silver_acoes.py          # t2_silver_acoes — Silver de Ações
-├── job_silver_bcb.py            # t2_silver_bcb — Silver de indicadores BCB
-├── job_silver_world_bank.py     # t2_silver_world_bank — Silver de World Bank
-├── job_silver.py                # t2 — Orquestra todas as transformações Silver (legado)
-├── job_corretora_analises.py    # t7 — Posição, score de risco, fraude, SQL
-├── job_scd.py                   # t9 — SCD Type 2 clientes e score risco
-├── job_gold.py                  # t3 — Orquestra geração das tabelas Gold
-├── job_observabilidade.py       # t4 — Monitoramento + OPTIMIZE ZORDER + VACUUM
-├── job_streaming.py             # t5 — Auto Loader (cloudFiles) → silver.streaming
-├── job_streaming_to_gold.py     # t10 — silver.streaming → 4 tabelas Gold (CDC + broadcast)
-├── job_clientes_ordens.py       # t6 — Ingestão Kaggle + ordens simuladas
-├── job_lakehouse_monitoring.py  # t8 — Lakehouse Monitoring via SDK
-└── job_carga_sql.py             # t_sql — Carga das tabelas Gold no Azure SQL
+ job_unity_catalog.py         # t0 — Registra tabelas; Liquid Clustering; Delta CDF
+ job_extracao_acoes.py        # t1_extracao_acoes — Ingestão de ações via Yahoo Finance
+ job_extracao_bcb.py          # t1_extracao_bcb — Ingestão de indicadores do Banco Central
+ job_extracao_world_bank.py   # t1_extracao_world_bank — Ingestão de dados do World Bank
+ job_extracao.py              # t1 — Orquestra todas as ingestões (legado)
+ job_clientes_ordens.py       # t6_clientes_ordens — Ingestão Kaggle + ordens simuladas
+ job_clientes_silver.py       # t6_clientes_silver — Bronze → Silver de clientes/ordens
+ job_silver_acoes.py          # t2_silver_acoes — Silver de Ações
+ job_silver_bcb.py            # t2_silver_bcb — Silver de indicadores BCB
+ job_silver_world_bank.py     # t2_silver_world_bank — Silver de World Bank
+ job_silver.py                # t2 — Orquestra todas as transformações Silver (legado)
+ job_corretora_analises.py    # t7 — Posição, score de risco, fraude, SQL
+ job_scd.py                   # t9 — SCD Type 2 clientes e score risco
+ job_gold.py                  # t3 — Orquestra geração das tabelas Gold
+ job_observabilidade.py       # t4 — Monitoramento + OPTIMIZE ZORDER + VACUUM
+ job_streaming.py             # t5 — Auto Loader (cloudFiles) → silver.streaming
+ job_streaming_to_gold.py     # t10 — silver.streaming → 4 tabelas Gold (CDC + broadcast)
+ job_clientes_ordens.py       # t6 — Ingestão Kaggle + ordens simuladas
+ job_lakehouse_monitoring.py  # t8 — Lakehouse Monitoring via SDK
+ job_carga_sql.py             # t_sql — Carga das tabelas Gold no Azure SQL
 
 dags/
-└── dag_pipeline_santander.py    # DAG Airflow — orquestra via API Databricks
+ dag_pipeline_santander.py    # DAG Airflow — orquestra via API Databricks
 
 docker/
-├── Dockerfile                   # Imagem Airflow customizada
-└── docker-compose.yml           # Stack completa: postgres + webserver + scheduler
+ Dockerfile                   # Imagem Airflow customizada
+ docker-compose.yml           # Stack completa: postgres + webserver + scheduler
 ```
 
 ---
@@ -1306,10 +1306,10 @@ Gold   → Dados agregados: indefinido
 
 ```
 Docker Compose
-├── postgres:13         → Banco de metadados do Airflow
-├── airflow-webserver   → Interface web (localhost:8080)
-├── airflow-scheduler   → Dispara as DAGs no horário
-└── airflow-init        → Inicializa DB e cria usuário admin
+ postgres:13         → Banco de metadados do Airflow
+ airflow-webserver   → Interface web (localhost:8080)
+ airflow-scheduler   → Dispara as DAGs no horário
+ airflow-init        → Inicializa DB e cria usuário admin
 ```
 ### Papel do Airflow no projeto
 

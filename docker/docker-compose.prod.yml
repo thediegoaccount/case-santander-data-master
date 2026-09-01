@@ -1,4 +1,4 @@
-# ─────────────────────────────────────────────────────────────────────────────
+# 
 # Docker Compose — Ambiente Enterprise (CeleryExecutor)
 #
 # Padrão: 1 container por serviço — separação de responsabilidades
@@ -24,7 +24,7 @@
 #   # Monitorar workers
 #   http://localhost:5555  (Flower)
 #   http://localhost:8080  (Airflow UI)
-# ─────────────────────────────────────────────────────────────────────────────
+# 
 
 x-airflow-common: &airflow-common
   build:
@@ -55,10 +55,10 @@ x-airflow-common: &airflow-common
       condition: service_healthy
   restart: unless-stopped
 
-# ─────────────────────────────────────────────────────────────────────────────
+# 
 services:
 
-  # ── 1. POSTGRES — Metadata DB ──────────────────────────────────────────────
+  #  1. POSTGRES — Metadata DB 
   postgres:
     image: postgres:15
     container_name: santander-postgres
@@ -77,7 +77,7 @@ services:
     networks:
       - santander-net
 
-  # ── 2. REDIS — Message Broker (fila Celery) ────────────────────────────────
+  #  2. REDIS — Message Broker (fila Celery) 
   redis:
     image: redis:7.2-alpine
     container_name: santander-redis
@@ -93,7 +93,7 @@ services:
     networks:
       - santander-net
 
-  # ── 3. AIRFLOW WEBSERVER — UI apenas ───────────────────────────────────────
+  #  3. AIRFLOW WEBSERVER — UI apenas 
   airflow-webserver:
     <<: *airflow-common
     container_name: santander-webserver
@@ -112,7 +112,7 @@ services:
     networks:
       - santander-net
 
-  # ── 4. AIRFLOW SCHEDULER — Orquestra e enfileira ───────────────────────────
+  #  4. AIRFLOW SCHEDULER — Orquestra e enfileira 
   airflow-scheduler:
     <<: *airflow-common
     container_name: santander-scheduler
@@ -129,7 +129,7 @@ services:
     networks:
       - santander-net
 
-  # ── 5. AIRFLOW WORKER — Executa tasks (escalável) ──────────────────────────
+  #  5. AIRFLOW WORKER — Executa tasks (escalável) 
   airflow-worker:
     <<: *airflow-common
     container_name: santander-worker
@@ -154,7 +154,7 @@ services:
     networks:
       - santander-net
 
-  # ── 6. AIRFLOW TRIGGERER — Operadores assíncronos ──────────────────────────
+  #  6. AIRFLOW TRIGGERER — Operadores assíncronos 
   airflow-triggerer:
     <<: *airflow-common
     container_name: santander-triggerer
@@ -171,7 +171,7 @@ services:
     networks:
       - santander-net
 
-  # ── 7. FLOWER — Dashboard de monitoramento dos workers ─────────────────────
+  #  7. FLOWER — Dashboard de monitoramento dos workers 
   flower:
     <<: *airflow-common
     container_name: santander-flower
@@ -190,7 +190,7 @@ services:
     networks:
       - santander-net
 
-  # ── INIT — Executa uma vez para setup inicial ───────────────────────────────
+  #  INIT — Executa uma vez para setup inicial 
   airflow-init:
     <<: *airflow-common
     container_name: santander-init
@@ -213,7 +213,7 @@ services:
     networks:
       - santander-net
 
-# ─────────────────────────────────────────────────────────────────────────────
+# 
 volumes:
   postgres-db:
   redis-data:

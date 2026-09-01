@@ -4,17 +4,46 @@ from datetime import datetime
 import pandas as pd
 import requests
 
+from src.config.environment import get_config, get_env, is_production
+from src.ingestion.api_wrapper import rate_limiter
 
-def extrair_bcb(spark, storage_account: str) -> int:
+
+def extrair_bcb(spark, storage_account: str = None) -> int:
+    """
+    Extrai dados do BCB com isolamento por ambiente.
+    
+    Args:
+        spark: Sessão Spark
+        storage_account: Nome do storage account (opcional, usa config do ambiente)
+    
+    Returns: total de registros gravados
+    """
+    env = get_env()
+    config = get_config()
+    
+    # Usar storage account do ambiente se não fornecido
+    if storage_account is None:
+        storage_account = config["storage_account"]
+    
     data_hoje = datetime.now().strftime("%Y-%m-%d")
     data_inicial = "01/04/2021"
     data_final = "01/04/2026"
+    
+    print(f"[{env.upper()}] Extraindo dados BCB...")
+    print(f"[{env.upper()}] Storage Account: {storage_account}")
+    print(f"[{env.upper()}] Catalog: {config['catalog']}")
+    
+    if is_production():
+        print(f"[{env.upper()}] *** PRODUÇÃO *** - Dados reais serão gravados")
 
     def buscar_serie(codigo, nome, data_inicial, data_final, max_retries=3):
         """
         Buscar série do BCB com filtro de data obrigatório (regra desde 26/03/2025).
-        Inclui validação robusta e retry com backoff.
+        Inclui validação robusta, retry com backoff e rate limiting por ambiente.
         """
+        # Rate limiting por ambiente
+        rate_limiter.wait_if_needed("bcb")
+        
         # IMPORTANTE: BCB exige filtros de data desde 26/03/2025
         # Período máximo: 10 anos
         url = (
@@ -32,48 +61,48 @@ def extrair_bcb(spark, storage_account: str) -> int:
 
                 # 1. Validar status HTTP
                 if response.status_code != 200:
-                    print(f"  ⚠️  {nome} — HTTP {response.status_code} (tentativa {tentativa}/{max_retries})")
+                    print(f"[{env.upper()}]   {nome} — HTTP {response.status_code} (tentativa {tentativa}/{max_retries})")
                     if tentativa < max_retries:
                         time.sleep(2**tentativa)
                         continue
-                    print(f"  ERRO: {nome} — HTTP {response.status_code} após {max_retries} tentativas")
+                    print(f"[{env.upper()}] ERRO: {nome} — HTTP {response.status_code} após {max_retries} tentativas")
                     return pd.DataFrame()
 
                 # 2. Validar response não vazio
                 if not response.text or response.text.strip() == "":
-                    print(f"  ⚠️  {nome} — Response vazio (tentativa {tentativa}/{max_retries})")
+                    print(f"[{env.upper()}]   {nome} — Response vazio (tentativa {tentativa}/{max_retries})")
                     if tentativa < max_retries:
                         time.sleep(2**tentativa)
                         continue
-                    print(f"  ERRO: {nome} — Response vazio após {max_retries} tentativas")
+                    print(f"[{env.upper()}] ERRO: {nome} — Response vazio após {max_retries} tentativas")
                     return pd.DataFrame()
 
                 # 3. Validar content-type é JSON (não HTML de erro)
                 content_type = response.headers.get("Content-Type", "")
                 if "json" not in content_type.lower() and "javascript" not in content_type.lower():
-                    print(f"  ⚠️  {nome} — Content-Type inválido: {content_type} (tentativa {tentativa}/{max_retries})")
-                    print(f"     Primeiros 100 chars: {response.text[:100]}")
+                    print(f"[{env.upper()}]   {nome} — Content-Type inválido: {content_type} (tentativa {tentativa}/{max_retries})")
+                    print(f"[{env.upper()}]    Primeiros 100 chars: {response.text[:100]}")
                     if tentativa < max_retries:
                         time.sleep(2**tentativa)
                         continue
-                    print(f"  ERRO: {nome} — API não retornou JSON")
+                    print(f"[{env.upper()}] ERRO: {nome} — API não retornou JSON")
                     return pd.DataFrame()
 
                 # 4. Parse JSON com tratamento de erro
                 try:
                     json_data = response.json()
                 except ValueError as json_err:
-                    print(f"  ⚠️  {nome} — JSON inválido: {str(json_err)[:80]} (tentativa {tentativa}/{max_retries})")
-                    print(f"     Primeiros 100 chars: {response.text[:100]}")
+                    print(f"[{env.upper()}]   {nome} — JSON inválido: {str(json_err)[:80]} (tentativa {tentativa}/{max_retries})")
+                    print(f"[{env.upper()}]    Primeiros 100 chars: {response.text[:100]}")
                     if tentativa < max_retries:
                         time.sleep(2**tentativa)
                         continue
-                    print(f"  ERRO: {nome} — JSON inválido após {max_retries} tentativas")
+                    print(f"[{env.upper()}] ERRO: {nome} — JSON inválido após {max_retries} tentativas")
                     return pd.DataFrame()
 
                 # 5. Validar estrutura
                 if not isinstance(json_data, list) or len(json_data) == 0:
-                    print(f"  ⚠️  {nome} — Dados vazios")
+                    print(f"[{env.upper()}]   {nome} — Dados vazios")
                     return pd.DataFrame()
 
                 # 6. Construir DataFrame
@@ -81,41 +110,42 @@ def extrair_bcb(spark, storage_account: str) -> int:
 
                 # 7. Validar colunas
                 if "data" not in df.columns or "valor" not in df.columns:
-                    print(f"  ⚠️  {nome} — Colunas inesperadas: {df.columns.tolist()}")
+                    print(f"[{env.upper()}]   {nome} — Colunas inesperadas: {df.columns.tolist()}")
                     return pd.DataFrame()
 
-                # 8. Enriquecer
+                # 8. Enriquecer com ambiente
                 df["indicador"] = nome
                 df["data_extracao"] = data_hoje
+                df["ambiente"] = env  # Tag de ambiente para rastreabilidade
                 df["valor"] = pd.to_numeric(df["valor"], errors="coerce")
                 df = df.dropna(subset=["valor"])
 
-                print(f"  ✅ OK: {nome} — {len(df)} registros")
+                print(f"[{env.upper()}]  OK: {nome} — {len(df)} registros")
                 return df
 
             except requests.exceptions.Timeout:
-                print(f"  ⚠️  {nome} — Timeout (tentativa {tentativa}/{max_retries})")
+                print(f"[{env.upper()}]   {nome} — Timeout (tentativa {tentativa}/{max_retries})")
                 if tentativa < max_retries:
                     time.sleep(2**tentativa)
                     continue
-                print(f"  ERRO: {nome} — Timeout após {max_retries} tentativas")
+                print(f"[{env.upper()}] ERRO: {nome} — Timeout após {max_retries} tentativas")
                 return pd.DataFrame()
 
             except requests.exceptions.ConnectionError as e:
-                print(f"  ⚠️  {nome} — Erro de conexão (tentativa {tentativa}/{max_retries})")
+                print(f"[{env.upper()}]   {nome} — Erro de conexão (tentativa {tentativa}/{max_retries})")
                 if tentativa < max_retries:
                     time.sleep(2**tentativa)
                     continue
-                print(f"  ERRO: {nome} — {str(e)[:80]}")
+                print(f"[{env.upper()}] ERRO: {nome} — {str(e)[:80]}")
                 return pd.DataFrame()
 
             except Exception as e:
-                print(f"  ERRO: {nome} — Inesperado: {str(e)[:100]}")
+                print(f"[{env.upper()}] ERRO: {nome} — Inesperado: {str(e)[:100]}")
                 return pd.DataFrame()
 
         return pd.DataFrame()
 
-    print("Extraindo BCB...")
+    print(f"[{env.upper()}] Extraindo séries BCB...")
 
     # IMPORTANTE: Todas as séries agora usam filtros de data (regra BCB 26/03/2025)
     # IPCA é mensal mas API exige filtro mesmo assim
@@ -131,25 +161,25 @@ def extrair_bcb(spark, storage_account: str) -> int:
     dfs_validos = [df for df in [df_selic, df_cambio, df_ipca] if len(df) > 0]
 
     if not dfs_validos:
-        print("❌ Nenhuma série BCB foi extraída com sucesso")
+        print(f"[{env.upper()}]  Nenhuma série BCB foi extraída com sucesso")
         return 0
 
     df_bcb = pd.concat(dfs_validos, ignore_index=True)
 
     if len(df_bcb) == 0:
-        print("❌ Nenhum dado para gravar no Bronze")
+        print(f"[{env.upper()}]  Nenhum dado para gravar no Bronze")
         return 0
 
-    # Salvar no Bronze
+    # Salvar no Bronze com caminho isolado por ambiente
     try:
         bronze_path = f"abfss://bronze@{storage_account}.dfs.core.windows.net/bcb/extracao={data_hoje}/"
         df_spark = spark.createDataFrame(df_bcb)
         df_spark.write.mode("overwrite").parquet(bronze_path)
 
         total = df_spark.count()
-        print(f"✅ Bronze BCB gravado: {total} registros")
+        print(f"[{env.upper()}]  Bronze BCB gravado: {total} registros")
         return total
 
     except Exception as e:
-        print(f"❌ Erro ao gravar Bronze: {str(e)}")
+        print(f"[{env.upper()}]  Erro ao gravar Bronze: {str(e)}")
         return 0

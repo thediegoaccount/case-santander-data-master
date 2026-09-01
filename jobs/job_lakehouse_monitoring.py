@@ -7,8 +7,10 @@ Ou via Databricks Workflow:
 """
 
 import sys
+from src.config.environment import setup_python_path
 
-sys.path.insert(0, "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
+setup_python_path()
+from src.config.logging import info, error, warning
 
 from datetime import datetime
 
@@ -17,7 +19,7 @@ from databricks.sdk import WorkspaceClient
 
 def main():
     inicio = datetime.now()
-    print(f"=== JOB LAKEHOUSE MONITORING INICIADO: {inicio} ===")
+    info("job_lakehouse_monitoring", f"=== JOB LAKEHOUSE MONITORING INICIADO: {inicio} ===")
 
     w = WorkspaceClient()
 
@@ -35,7 +37,7 @@ def main():
         "case_santander.silver.streaming",
     ]
 
-    print("Verificando monitores Lakehouse Monitoring...")
+    info("job_lakehouse_monitoring", "Verificando monitores Lakehouse Monitoring...")
     for tabela in tabelas:
         try:
             monitor = w.lakehouse_monitors.create(
@@ -44,17 +46,17 @@ def main():
                 output_schema_name="case_santander.gold",
                 snapshot={},
             )
-            print(f"  ✅ Monitor criado: {tabela} → {monitor.status}")
+            info("job_lakehouse_monitoring", f"   Monitor criado: {tabela} → {monitor.status}")
         except Exception as e:
             if "already exists" in str(e).lower():
                 monitor = w.lakehouse_monitors.get(full_name=tabela)
-                print(f"  ℹ️ Monitor existente: {tabela} → {monitor.status}")
+                info("job_lakehouse_monitoring", f"  ℹ Monitor existente: {tabela} → {monitor.status}")
             else:
-                print(f"  ❌ Erro em {tabela}: {e}")
+                info("job_lakehouse_monitoring", f"   Erro em {tabela}: {e}")
 
     fim = datetime.now()
-    print("\n=== JOB LAKEHOUSE MONITORING CONCLUIDO ===")
-    print(f"Duracao: {(fim - inicio).total_seconds():.2f}s")
+    info("job_lakehouse_monitoring", "\n=== JOB LAKEHOUSE MONITORING CONCLUIDO ===")
+    info("job_lakehouse_monitoring", f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
 
 main()

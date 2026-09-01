@@ -1,23 +1,9 @@
 """
-DAG: Pipeline Corretora Santander
-Orquestra o pipeline completo de dados financeiros via Airflow + Databricks.
+DAG: Pipeline Corretora Santander (Sincronizado com Databricks Asset Bundles)
+Gerado automaticamente via scripts/sync_airflow_from_databricks.py
 
-Fluxo de dados:
-  [setup]
-    t0_unity_catalog
-  [ingestion]  — todos em paralelo após t0
-    t1_extracao_acoes | t1_extracao_bcb | t1_extracao_world_bank | t5_streaming | t6_clientes_ordens
-  [silver]  — cada fonte alimenta apenas sua própria Silver
-    t1_acoes → t2_silver_acoes
-    t1_bcb   → t2_silver_bcb
-    t1_world_bank → t2_silver_world_bank
-    t6       → t6_clientes_silver
-  [gold]  — pipelines paralelos
-    [t2_acoes, t2_bcb, t2_world_bank] → t3_gold          (anomalias, performance, fraude de mercado)
-    t6_silver → t7_corretora_analises → t9_scd            (posição, score, SCD clientes)
-    [t3_gold, t5_streaming] → t10_streaming_gold          (fraude/anomalias intraday)
-  [finalizacao]
-    [t3, t7, t9, t10] → t8_lakehouse_monitoring | t_carga_sql → t4_observabilidade
+ NÃO EDITE MANUALMENTE - Alterações devem ser feitas em databricks.yml
+Este DAG reflete as dependências do workflow pai pipeline_completo
 """
 
 import os
@@ -27,18 +13,21 @@ from airflow import DAG
 from airflow.providers.databricks.operators.databricks import DatabricksSubmitRunOperator
 from airflow.utils.task_group import TaskGroup
 
-CLUSTER_ID = "0401-150803-wefgy1hc"
-REPO_PATH  = "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master"
+# Configurações do Databricks (lidas de variáveis de ambiente)
+CLUSTER_ID = os.getenv("DATABRICKS_CLUSTER_ID", "0401-150803-wefgy1hc")
+REPO_PATH = os.getenv("DATABRICKS_REPO_PATH", "/Workspace/Users/diego.silva0001@gmail.com/case-santander-data-master")
+ENVIRONMENT = os.getenv("ENVIRONMENT", "hk")
 
 default_args = {
-    "owner":            "santander",
-    "retries":          2,
-    "retry_delay":      timedelta(minutes=5),
+    "owner": "santander",
+    "retries": 2,
+    "retry_delay": timedelta(minutes=5),
     "email_on_failure": False,
 }
 
 
 def databricks_task(task_id: str, job_path: str) -> DatabricksSubmitRunOperator:
+    """Cria task do Airflow para executar job no Databricks"""
     return DatabricksSubmitRunOperator(
         task_id=task_id,
         databricks_conn_id="databricks_default",
@@ -54,63 +43,176 @@ def databricks_task(task_id: str, job_path: str) -> DatabricksSubmitRunOperator:
 with DAG(
     dag_id="pipeline_corretora_santander",
     default_args=default_args,
-    description="Pipeline de dados financeiros — Corretora Santander",
+    description=f"Pipeline de dados financeiros — Corretora Santander (Ambiente: {ENVIRONMENT})",
     schedule_interval="0 6 * * *",  # 06:00 Brasília
     start_date=datetime(2026, 1, 1),
     catchup=False,
-    tags=["santander", "databricks", "financeiro"],
+    tags=["santander", "databricks", "financeiro", "synced", ENVIRONMENT],
 ) as dag:
 
-    # ── Setup ──────────────────────────────────────────────────────────────
-    t0 = databricks_task("t0_unity_catalog", "jobs/job_unity_catalog.py")
+    # Setup Unity Catalog e schemas
+    t0_unity_catalog = databricks_task(
+        task_id="t0_unity_catalog",
+        job_path="jobs/job_unity_catalog.py"
+    )
 
-    # ── Ingestion ──────────────────────────────────────────────────────────
-    with TaskGroup("ingestion") as tg_ingestion:
-        t1_acoes      = databricks_task("t1_extracao_acoes",      "jobs/job_extracao_acoes.py")
-        t1_bcb        = databricks_task("t1_extracao_bcb",        "jobs/job_extracao_bcb.py")
-        t1_world_bank = databricks_task("t1_extracao_world_bank", "jobs/job_extracao_world_bank.py")
-        t5            = databricks_task("t5_streaming",            "jobs/job_streaming.py")
-        t6            = databricks_task("t6_clientes_ordens",      "jobs/job_clientes_ordens.py")
+    # Extração Yahoo Finance
+    t1_extracao_acoes = databricks_task(
+        task_id="t1_extracao_acoes",
+        job_path="jobs/job_extracao_acoes.py"
+    )
 
-    # ── Silver ─────────────────────────────────────────────────────────────
-    with TaskGroup("silver") as tg_silver:
-        t2_acoes      = databricks_task("t2_silver_acoes",       "jobs/job_silver_acoes.py")
-        t2_bcb        = databricks_task("t2_silver_bcb",         "jobs/job_silver_bcb.py")
-        t2_world_bank = databricks_task("t2_silver_world_bank",  "jobs/job_silver_world_bank.py")
-        t6_silver     = databricks_task("t6_clientes_silver",    "jobs/job_clientes_silver.py")
+    # Extração BCB API
+    t1_extracao_bcb = databricks_task(
+        task_id="t1_extracao_bcb",
+        job_path="jobs/job_extracao_bcb.py"
+    )
 
-    # ── Gold ───────────────────────────────────────────────────────────────
-    with TaskGroup("gold") as tg_gold:
-        t3  = databricks_task("t3_gold",               "jobs/job_gold.py")
-        t7  = databricks_task("t7_corretora_analises", "jobs/job_corretora_analises.py")
-        t9  = databricks_task("t9_scd",                "jobs/job_scd.py")
-        t10 = databricks_task("t10_streaming_gold",    "jobs/job_streaming_to_gold.py")
+    # Extração World Bank API
+    t1_extracao_world_bank = databricks_task(
+        task_id="t1_extracao_world_bank",
+        job_path="jobs/job_extracao_world_bank.py"
+    )
 
-    # ── Finalização ────────────────────────────────────────────────────────
-    with TaskGroup("finalizacao") as tg_finalizacao:
-        t8    = databricks_task("t8_lakehouse_monitoring", "jobs/job_lakehouse_monitoring.py")
-        t_sql = databricks_task("t_carga_sql",             "jobs/job_carga_sql.py")
-        t4    = databricks_task("t4_observabilidade",      "jobs/job_observabilidade.py")
+    # Clientes e Ordens Kaggle
+    t6_clientes_ordens = databricks_task(
+        task_id="t6_clientes_ordens",
+        job_path="jobs/job_clientes_ordens.py"
+    )
 
-    # ── Dependências ───────────────────────────────────────────────────────
+    # Transformação Silver Ações
+    t2_silver_acoes = databricks_task(
+        task_id="t2_silver_acoes",
+        job_path="jobs/job_silver_acoes.py"
+    )
 
-    # Setup → todas as ingestões em paralelo (streaming e clientes NÃO dependem de mercado)
-    t0 >> [t1_acoes, t1_bcb, t1_world_bank, t5, t6]
+    # Transformação Silver BCB
+    t2_silver_bcb = databricks_task(
+        task_id="t2_silver_bcb",
+        job_path="jobs/job_silver_bcb.py"
+    )
 
-    # Bronze → Silver: cada fonte alimenta apenas sua própria transformação
-    t1_acoes      >> t2_acoes
-    t1_bcb        >> t2_bcb
-    t1_world_bank >> t2_world_bank
-    t6            >> t6_silver
+    # Transformação Silver World Bank
+    t2_silver_world_bank = databricks_task(
+        task_id="t2_silver_world_bank",
+        job_path="jobs/job_silver_world_bank.py"
+    )
 
-    # Silver → Gold: pipelines de mercado e clientes correm em paralelo
-    [t2_acoes, t2_bcb, t2_world_bank] >> t3   # mercado: anomalias, performance, fraude
-    t6_silver >> t7                             # clientes: posição, score risco, perfil, ordens
-    t7 >> t9                                   # SCD type-2 após gold.score_risco_clientes existir
+    # Transformação Silver Clientes
+    t6_clientes_silver = databricks_task(
+        task_id="t6_clientes_silver",
+        job_path="jobs/job_clientes_silver.py"
+    )
 
-    # Streaming Gold precisa de silver.streaming (t5) E gold.performance_acoes (t3)
-    [t3, t5] >> t10
+    # Gold Anomalias
+    t3_anomalias = databricks_task(
+        task_id="t3_anomalias",
+        job_path="jobs/job_gold_anomalias.py"
+    )
 
-    # Finalização: monitora e carrega SQL após todos os Gold estarem prontos
-    [t3, t7, t9, t10] >> [t8, t_sql]
-    [t8, t_sql] >> t4
+    # Gold Performance
+    t3_performance = databricks_task(
+        task_id="t3_performance",
+        job_path="jobs/job_gold_performance.py"
+    )
+
+    # Gold BCB
+    t3_bcb = databricks_task(
+        task_id="t3_bcb",
+        job_path="jobs/job_gold_bcb.py"
+    )
+
+    # Gold World Bank
+    t3_world_bank = databricks_task(
+        task_id="t3_world_bank",
+        job_path="jobs/job_gold_world_bank.py"
+    )
+
+    # Gold Ações vs Câmbio
+    t3_acoes_cambio = databricks_task(
+        task_id="t3_acoes_cambio",
+        job_path="jobs/job_gold_acoes_vs_cambio.py"
+    )
+
+    # Corretora Análises
+    t7_corretora_analises = databricks_task(
+        task_id="t7_corretora_analises",
+        job_path="jobs/job_corretora_analises.py"
+    )
+
+    # SCD Type 2
+    t9_scd = databricks_task(
+        task_id="t9_scd",
+        job_path="jobs/job_scd.py"
+    )
+
+    # Gold Fraude
+    t3_fraude = databricks_task(
+        task_id="t3_fraude",
+        job_path="jobs/job_gold_fraude.py"
+    )
+
+    # Carga SQL Ações
+    t_sql_acoes = databricks_task(
+        task_id="t_sql_acoes",
+        job_path="jobs/job_carga_sql_acoes.py"
+    )
+
+    # Carga SQL Fraude
+    t_sql_fraude = databricks_task(
+        task_id="t_sql_fraude",
+        job_path="jobs/job_carga_sql_fraude.py"
+    )
+
+    # Carga SQL Clientes
+    t_sql_clientes = databricks_task(
+        task_id="t_sql_clientes",
+        job_path="jobs/job_carga_sql_clientes.py"
+    )
+
+    # Carga SQL Macro
+    t_sql_macro = databricks_task(
+        task_id="t_sql_macro",
+        job_path="jobs/job_carga_sql_macro.py"
+    )
+
+    # Lakehouse Monitoring
+    t8_lakehouse_monitoring = databricks_task(
+        task_id="t8_lakehouse_monitoring",
+        job_path="jobs/job_lakehouse_monitoring.py"
+    )
+
+    # Observabilidade
+    t4_observabilidade = databricks_task(
+        task_id="t4_observabilidade",
+        job_path="jobs/job_observabilidade.py"
+    )
+
+    #  Dependências (Sincronizadas do databricks.yml) 
+    [t0_unity_catalog] >> t1_extracao_acoes
+    [t0_unity_catalog] >> t1_extracao_bcb
+    [t0_unity_catalog] >> t1_extracao_world_bank
+    [t0_unity_catalog] >> t6_clientes_ordens
+    [t1_extracao_acoes] >> t2_silver_acoes
+    [t1_extracao_bcb] >> t2_silver_bcb
+    [t1_extracao_world_bank] >> t2_silver_world_bank
+    [t6_clientes_ordens] >> t6_clientes_silver
+    [t2_silver_acoes, t2_silver_bcb, t2_silver_world_bank] >> t3_anomalias
+    [t2_silver_acoes, t2_silver_bcb, t2_silver_world_bank] >> t3_performance
+    [t2_silver_acoes, t2_silver_bcb, t2_silver_world_bank] >> t3_bcb
+    [t2_silver_acoes, t2_silver_bcb, t2_silver_world_bank] >> t3_world_bank
+    [t3_performance, t3_bcb] >> t3_acoes_cambio
+    [t6_clientes_silver] >> t7_corretora_analises
+    [t7_corretora_analises] >> t9_scd
+    [t9_scd] >> t3_fraude
+    [t3_anomalias, t3_acoes_cambio] >> t_sql_acoes
+    [t3_fraude] >> t_sql_fraude
+    [t7_corretora_analises, t9_scd] >> t_sql_clientes
+    [t3_bcb, t3_world_bank, t3_acoes_cambio] >> t_sql_macro
+    [t_sql_acoes, t_sql_clientes, t_sql_fraude, t_sql_streaming, t_sql_macro] >> t8_lakehouse_monitoring
+    [t_sql_acoes, t_sql_clientes, t_sql_fraude, t_sql_streaming, t_sql_macro] >> t4_observabilidade
+
+# Este DAG foi gerado automaticamente a partir de databricks.yml
+# Reflete as dependências do workflow pai pipeline_completo
+# Para regerar: python scripts/sync_airflow_from_databricks.py
+# Para modificar: Edite databricks.yml e rode o script novamente

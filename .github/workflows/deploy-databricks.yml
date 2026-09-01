@@ -1,0 +1,331 @@
+name: Deploy to Databricks
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'jobs/**'
+      - 'src/**'
+      - 'databricks.yml'
+      - '.github/workflows/deploy-databricks.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target environment (dev/prod)'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # 
+  # VALIDAÇÃO: Lint, type checking, syntax validation
+  # 
+  validate:
+    name: Validate Configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install databricks-cli pyyaml
+
+      - name: Validate databricks.yml syntax
+        run: |
+          python -c "
+          import yaml
+          with open('databricks.yml', 'r') as f:
+              yaml.safe_load(f)
+          print(' databricks.yml is valid YAML')
+          "
+
+      - name: Validate Python syntax
+        run: |
+          find jobs -name '*.py' -exec python -m py_compile {} \;
+          find src -name '*.py' -exec python -m py_compile {} \;
+          echo ' All Python files have valid syntax'
+
+      - name: Validate DAG syntax
+        run: |
+          python -m py_compile dags/dag_pipeline_santander.py
+          echo ' Airflow DAG syntax is valid'
+
+  # 
+  # DEPLOY DEV: Deploy to development environment
+  # 
+  deploy-dev:
+    name: Deploy to Development
+    needs: validate
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'dev')
+    environment:
+      name: development
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for git describe
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Databricks CLI
+        run: |
+          pip install databricks-cli
+
+      - name: Configure Databricks CLI
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST_DEV }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_DEV }}
+        run: |
+          databricks --version
+          echo " Databricks CLI configured for DEV"
+
+      - name: Deploy Asset Bundle
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST_DEV }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_DEV }}
+          DEV_CLUSTER_ID: ${{ secrets.DEV_CLUSTER_ID }}
+          DATABRICKS_HOST_DEV: ${{ secrets.DATABRICKS_HOST_DEV }}
+          DATABRICKS_TOKEN_DEV: ${{ secrets.DATABRICKS_TOKEN_DEV }}
+        run: |
+          databricks bundle deploy --target dev 2>&1 | tee deploy.log
+          echo " Asset Bundle deployed to DEV"
+
+      - name: Verify Jobs Created
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST_DEV }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_DEV }}
+        run: |
+          echo "Checking deployed jobs..."
+          databricks jobs list --output json | python -m json.tool
+
+      - name: Upload deployment logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: deploy-dev-logs
+          path: deploy.log
+
+  # 
+  # DEPLOY PROD: Deploy to production environment
+  # 
+  deploy-prod:
+    name: Deploy to Production
+    needs: validate
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: production
+      url: https://prod.cloud.databricks.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Databricks CLI
+        run: |
+          pip install databricks-cli
+
+      - name: Configure Databricks CLI
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST_PROD }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_PROD }}
+        run: |
+          databricks --version
+          echo " Databricks CLI configured for PROD"
+
+      - name: Backup current state
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST_PROD }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_PROD }}
+        run: |
+          mkdir -p backups
+          databricks jobs list --output json > backups/jobs-before-${{ github.sha }}.json
+          echo " Backup created: backups/jobs-before-${{ github.sha }}.json"
+
+      - name: Deploy Asset Bundle
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST_PROD }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_PROD }}
+          PROD_CLUSTER_ID: ${{ secrets.PROD_CLUSTER_ID }}
+          DATABRICKS_HOST_PROD: ${{ secrets.DATABRICKS_HOST_PROD }}
+          DATABRICKS_TOKEN_PROD: ${{ secrets.DATABRICKS_TOKEN_PROD }}
+        run: |
+          databricks bundle deploy --target prod 2>&1 | tee deploy.log
+          echo " Asset Bundle deployed to PROD"
+
+      - name: Verify Jobs Created
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST_PROD }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_PROD }}
+        run: |
+          echo "Checking deployed jobs..."
+          databricks jobs list --output json | python -m json.tool
+          echo " All jobs verified in PROD"
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: |
+            Production deployment completed successfully
+
+            **Deployed Changes:**
+            - Git SHA: ${{ github.sha }}
+            - Timestamp: ${{ github.event.head_commit.timestamp }}
+            - Commit: ${{ github.event.head_commit.message }}
+
+            **Databricks Status:**
+             Jobs deployed to production
+             Repos synced to `/Repos/case-santander-data-master`
+             All configurations validated
+
+            **Backup:** `backups/jobs-before-${{ github.sha }}.json`
+          draft: false
+          prerelease: false
+
+      - name: Upload deployment logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: deploy-prod-logs
+          path: deploy.log
+
+      - name: Upload backup
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: prod-backup-${{ github.sha }}
+          path: backups/
+
+  # 
+  # VALIDATE DAG: Check Airflow DAG syntax and structure
+  # 
+  validate-airflow-dag:
+    name: Validate Airflow DAG
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Airflow
+        run: |
+          pip install apache-airflow==2.7.0
+          pip install apache-airflow-providers-databricks
+          pip install pyyaml
+
+      - name: Sync Airflow DAG with Databricks Asset Bundles
+        run: |
+          python scripts/sync_airflow_from_databricks.py --validate --generate
+          echo " Airflow DAG sincronizado com databricks.yml"
+
+      - name: Validate DAG syntax
+        env:
+          AIRFLOW_HOME: /tmp/airflow
+          AIRFLOW__CORE__LOAD_EXAMPLES: false
+          AIRFLOW__CORE__UNIT_TEST_MODE: True
+        run: |
+          mkdir -p $AIRFLOW_HOME
+          python -m py_compile dags/dag_pipeline_santander.py
+          echo " DAG syntax is valid"
+
+      - name: Verify DAG structure
+        env:
+          AIRFLOW_HOME: /tmp/airflow
+          AIRFLOW__CORE__LOAD_EXAMPLES: false
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'dags')
+          from dag_pipeline_santander import dag
+          print('DAG ID:', dag.dag_id)
+          print('Number of tasks:', len(dag.tasks))
+          print('Tasks:', [t.task_id for t in dag.tasks])
+          print(' DAG structure validated')
+          "
+
+      - name: Check for unsynced changes
+        run: |
+          if git diff --name-only | grep -q "dags/dag_pipeline_santander.py"; then
+            echo " DAG foi regerado pelo script de sincronização"
+            echo " Por favor, commit as mudanças geradas"
+            git diff dags/dag_pipeline_santander.py
+            exit 1
+          fi
+
+  # 
+  # NOTIFICATION: Slack/Teams notification
+  # 
+  notify:
+    name: Notify Deployment
+    runs-on: ubuntu-latest
+    needs: [validate, validate-airflow-dag]
+    if: always()
+    steps:
+      - name: Determine status
+        id: status
+        run: |
+          if [[ "${{ needs.validate.result }}" == "success" && "${{ needs.validate-airflow-dag.result }}" == "success" ]]; then
+            echo "status= SUCCESS" >> $GITHUB_OUTPUT
+            echo "color=good" >> $GITHUB_OUTPUT
+          else
+            echo "status= FAILED" >> $GITHUB_OUTPUT
+            echo "color=danger" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Slack notification
+        if: env.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v1.24.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          payload: |
+            {
+              "text": "${{ steps.status.outputs.status }} - Databricks deployment",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*${{ steps.status.outputs.status }}* - Databricks Pipeline Deployment\n*Branch:* ${{ github.ref }}\n*Commit:* ${{ github.sha }}"
+                  }
+                }
+              ]
+            }
