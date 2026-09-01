@@ -72,8 +72,22 @@ def retry(
 
 
 def retry_on_connection_error(max_attempts: int = 3):
-    """Retry específico para erros de conexão"""
-    return retry(max_attempts=max_attempts, delay=1.0, backoff=2.0, exceptions=(ConnectionError, TimeoutError))
+    """
+    Retry específico para erros de conexão.
+
+    IMPORTANTE: requests levanta suas próprias exceções (requests.exceptions.ConnectionError
+    e .Timeout), que NÃO herdam das built-in ConnectionError/TimeoutError do Python.
+    Ambas as famílias precisam ser capturadas para o retry funcionar em chamadas HTTP.
+    """
+    from requests.exceptions import ConnectionError as RequestsConnectionError
+    from requests.exceptions import Timeout as RequestsTimeout
+
+    return retry(
+        max_attempts=max_attempts,
+        delay=1.0,
+        backoff=2.0,
+        exceptions=(RequestsConnectionError, RequestsTimeout, ConnectionError, TimeoutError),
+    )
 
 
 def retry_on_http_error(max_attempts: int = 3, status_codes: tuple = (500, 502, 503, 504)):
