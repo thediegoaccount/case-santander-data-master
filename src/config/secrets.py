@@ -11,23 +11,23 @@ from .environment import get_config
 def get_secret(key: str):
     """
     Recupera secret do Key Vault dinamicamente
-    
+
     Usa key_vault do ambiente configurado (HK ou PROD)
     via src/config/environment.py
-    
+
     Args:
         key: Nome da secret (ex: client-id, client-secret)
-    
+
     Returns:
         Valor da secret
-    
+
     Exemplo:
         client_id = get_secret("client-id")
         storage_account = get_secret("storage-account")
     """
     config = get_config()
     key_vault = config["key_vault"]
-    
+
     return dbutils.secrets.get(scope=key_vault, key=key)
 
 

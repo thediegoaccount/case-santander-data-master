@@ -35,7 +35,11 @@ jobs:
       - name: Run lint
         run: |
           pip install flake8
-          flake8 src/ --max-line-length=120 --ignore=E501
+          # --extend-ignore preserva os defaults do flake8 (E121,E123,E126,E226,E24,E704,W503,W504)
+          # e adiciona: E501 (linha longa, já coberto por black), E203 (incompatível com black),
+          # E122/E128 (indentação de continuação — conflita com os method chains do PySpark
+          # deliberadamente preservados via "# fmt: off" em src/gold/*.py)
+          flake8 src/ --max-line-length=120 --extend-ignore=E501,E203,E122,E128
       
       - name: Run data quality tests
         run: |

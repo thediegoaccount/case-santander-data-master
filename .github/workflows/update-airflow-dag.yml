@@ -112,7 +112,7 @@ jobs:
           "
       
       - name: Upload DAG artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: airflow-dag
           path: dags/dag_pipeline_santander_auto.py
@@ -130,7 +130,7 @@ jobs:
         uses: actions/checkout@v4
       
       - name: Download DAG artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: airflow-dag
       
@@ -171,7 +171,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Download DAG artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: airflow-dag
       

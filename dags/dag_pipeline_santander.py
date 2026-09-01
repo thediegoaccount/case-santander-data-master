@@ -176,6 +176,12 @@ with DAG(
         job_path="jobs/job_carga_sql_macro.py"
     )
 
+    # Carga SQL Streaming — tabelas real-time (fraude_streaming, anomalias_intraday, volume_intraday, ranking_acoes_realtime)
+    t_sql_streaming = databricks_task(
+        task_id="t_sql_streaming",
+        job_path="jobs/job_carga_sql_streaming.py"
+    )
+
     # Lakehouse Monitoring
     t8_lakehouse_monitoring = databricks_task(
         task_id="t8_lakehouse_monitoring",
@@ -209,6 +215,7 @@ with DAG(
     [t3_fraude] >> t_sql_fraude
     [t7_corretora_analises, t9_scd] >> t_sql_clientes
     [t3_bcb, t3_world_bank, t3_acoes_cambio] >> t_sql_macro
+    [t0_unity_catalog] >> t_sql_streaming
     [t_sql_acoes, t_sql_clientes, t_sql_fraude, t_sql_streaming, t_sql_macro] >> t8_lakehouse_monitoring
     [t_sql_acoes, t_sql_clientes, t_sql_fraude, t_sql_streaming, t_sql_macro] >> t4_observabilidade
 

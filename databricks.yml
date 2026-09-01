@@ -830,6 +830,26 @@ resources:
         timeout_seconds: 1800
         max_retries: 2
 
+      - task_key: t_sql_streaming
+        description: "Carga SQL Streaming — tabelas real-time (fraude_streaming, anomalias_intraday, volume_intraday, ranking_acoes_realtime)"
+        depends_on:
+          - task_key: t0_unity_catalog
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: jobs.job_carga_sql_streaming
+        new_cluster:
+          spark_version: ${var.spark_version}
+          node_type_id: "i3.xlarge"
+          num_workers: ${var.sql_workers}
+          aws_attributes:
+            availability: "SPOT"
+            zone_id: "us-west-2a"
+          idle_timeout_minutes: 10
+          spark_conf:
+            "spark.sql.shuffle.partitions": "100"
+        timeout_seconds: 1800
+        max_retries: 2
+
       #  FINALIZAÇÃO
       - task_key: t8_lakehouse_monitoring
         description: "Lakehouse Monitoring"

@@ -123,7 +123,7 @@ jobs:
 
       - name: Upload deployment logs
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: deploy-dev-logs
           path: deploy.log
@@ -217,14 +217,14 @@ jobs:
 
       - name: Upload deployment logs
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: deploy-prod-logs
           path: deploy.log
 
       - name: Upload backup
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: prod-backup-${{ github.sha }}
           path: backups/

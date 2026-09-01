@@ -65,11 +65,9 @@ def analisar_indicadores_bcb(spark: SparkSession) -> int:
     # fmt: on
 
     # Gravar Gold
-    df_analise.write \
-        .format("delta") \
-        .mode("overwrite") \
-        .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.gold.indicadores_bcb")
+    df_analise.write.format("delta").mode("overwrite").option("mergeSchema", "true").saveAsTable(
+        "case_santander.gold.indicadores_bcb"
+    )
 
     print("Gold indicadores_bcb gravado")
     return 0  # Metrics in Spark UI

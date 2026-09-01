@@ -58,7 +58,7 @@ def get_spark():
 def get_credentials(dbutils):
     """Busca credenciais do Key Vault via get_secret (dinâmico)"""
     from .secrets import get_secret
-    
+
     return {
         "client_id": get_secret("client-id"),
         "tenant_id": get_secret("tenant-id"),
