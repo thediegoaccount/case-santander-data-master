@@ -25,6 +25,7 @@ dados em ambiente de nuvem Azure com Databricks
 | Ingestão em lote | Azure Data Factory — agendado diariamente às 05:00 |
 | Ingestão em streaming | Azure Event Hub (Kafka) + Structured Streaming |
 | Armazenamento | Azure ADLS Gen2 — Medallion Architecture (Bronze/Silver/Gold) |
+| Serving | Lakehouse puro — tabelas Gold em Delta consumidas via Unity Catalog / SQL Warehouse, sem cópia para banco relacional |
 | Observabilidade | Tabela Gold de qualidade + Databricks Lakehouse Monitoring |
 | Segurança | Azure Key Vault, Service Principal OAuth2, RBAC |
 | Mascaramento LGPD | Hash SHA-256, mascaramento de sobrenome, sem CPF no pipeline |
@@ -68,8 +69,8 @@ dados em ambiente de nuvem Azure com Databricks
                                           
                                           
   
-   Unity Catalog          Azure SQL Database · Dashboard · Genie AI
-   Governança · RBAC      Serving layer para consumo analítico      
+   Unity Catalog          SQL Warehouse · Dashboard · Genie AI
+   Governança · RBAC      Consumo direto sobre as tabelas Gold      
   
 ```
 
@@ -82,7 +83,7 @@ dados em ambiente de nuvem Azure com Databricks
 | Orquestração Batch | Azure Data Factory | adf-case-santander |
 | Orquestração Streaming | Azure Event Hub (Kafka Standard) | evhcasesantander |
 | Segredos | Azure Key Vault | kv-case-santander |
-| Serving | Azure SQL Database | sqldb-case-santander |
+| Serving | Delta Lake + Unity Catalog (lakehouse) | case_santander.gold.* |
 | Governança | Unity Catalog | case_santander |
 | CI/CD | GitHub Actions | .github/workflows/ci-cd.yml |
 | Orquestração local | Apache Airflow + Docker | docker/docker-compose.yml |
@@ -103,7 +104,7 @@ dados em ambiente de nuvem Azure com Databricks
 | Streaming | Azure Event Hub (Kafka) |
 | Segurança | Azure Key Vault |
 | Governança | Unity Catalog |
-| Serving | Azure SQL Database |
+| Serving | Delta Lake + SQL Warehouse (lakehouse) |
 | CI/CD | GitHub Actions |
 | Formato | Delta Lake |
 | IA Conversacional | Databricks Genie |
@@ -161,24 +162,23 @@ case_santander/
 
 ## Fluxo de orquestração — Databricks Workflow
 
-Job `pipeline-case-santander` (definido em `databricks.yml`), 21 tasks — o DAG do Airflow (`dags/dag_pipeline_santander.py`) é gerado automaticamente a partir dele via `scripts/sync_airflow_from_databricks.py`:
+Job `pipeline_completo` (definido em `databricks.yml`), 19 tasks, agendado às 06:00 — o DAG do Airflow (`dags/dag_pipeline_santander.py`) é gerado automaticamente a partir dele via `scripts/sync_airflow_from_databricks.py`:
 
 ```
 t0_unity_catalog
- ├─▶ t1_extracao_acoes ──▶ t2_silver_acoes ─┐
- ├─▶ t1_extracao_bcb ──────▶ t2_silver_bcb ─┼─▶ t3_anomalias
- ├─▶ t1_extracao_world_bank ▶ t2_silver_wb ─┼─▶ t3_performance ─┐
- └─▶ t6_clientes_ordens ──▶ t6_clientes_silver             ├─▶ t3_acoes_cambio ─┐
-                              │                             │  t3_bcb ──────────┤
-                              ▼                             │  t3_world_bank ───┤
-                        t7_corretora_analises                                    │
-                              ▼                                                  │
-                            t9_scd ──▶ t3_fraude ─────────────────────────────────┤
-                                                                                   ▼
-                          t_sql_acoes · t_sql_clientes · t_sql_fraude · t_sql_macro
-                                          │
-                              ┌───────────┴───────────┐
-                    t8_lakehouse_monitoring   t4_observabilidade
+ ├─▶ t1_extracao_acoes ──────▶ t2_silver_acoes ──┐
+ ├─▶ t1_extracao_bcb ────────▶ t2_silver_bcb ────┼─▶ t3_anomalias ───────┐
+ ├─▶ t1_extracao_world_bank ─▶ t2_silver_wb ─────┤   t3_world_bank ──────┤
+ │                                               ├─▶ t3_performance ─┐   │
+ │                                               └─▶ t3_bcb ─────────┴─▶ t3_acoes_cambio
+ │                                                                          │
+ └─▶ t6_clientes_ordens ─▶ t6_clientes_silver ─▶ t7_corretora_analises      │
+                                                        ▼                   │
+                                                     t9_scd ─▶ t3_fraude ───┤
+                                                                            ▼
+                                                        t8_lakehouse_monitoring
+                                                                            ▼
+                                                          t4_observabilidade
 ```
 
 Camada de streaming (independente, alimentada pelo Azure Event Hub): `job_streaming.py` / `job_streaming_continuous.py` → `job_streaming_to_gold.py` / `job_streaming_to_gold_continuous.py`, com CDC via `silver.streaming`.
@@ -513,14 +513,10 @@ Tasks (em ordem, refletindo `databricks.yml` — fonte de verdade também sincro
 - t7_corretora_analises → jobs/job_corretora_analises.py (Git) depende: t6_clientes_silver
 - t9_scd → jobs/job_scd.py (Git) depende: t7_corretora_analises
 - t3_fraude → jobs/job_gold_fraude.py (Git) depende: t9_scd
-- t_sql_acoes → jobs/job_carga_sql_acoes.py (Git) depende: t3_anomalias, t3_acoes_cambio
-- t_sql_fraude → jobs/job_carga_sql_fraude.py (Git) depende: t3_fraude
-- t_sql_clientes → jobs/job_carga_sql_clientes.py (Git) depende: t7_corretora_analises, t9_scd
-- t_sql_macro → jobs/job_carga_sql_macro.py (Git) depende: t3_bcb, t3_world_bank, t3_acoes_cambio
-- t8_lakehouse_monitoring → jobs/job_lakehouse_monitoring.py (Git) depende: t_sql_acoes, t_sql_clientes, t_sql_fraude, t_sql_macro
-- t4_observabilidade → jobs/job_observabilidade.py (Git) depende: t_sql_acoes, t_sql_clientes, t_sql_fraude, t_sql_macro
+- t8_lakehouse_monitoring → jobs/job_lakehouse_monitoring.py (Git) depende: t3_anomalias, t3_acoes_cambio, t3_world_bank, t3_fraude
+- t4_observabilidade → jobs/job_observabilidade.py (Git) depende: t8_lakehouse_monitoring
 
-Streaming (job separado, alimentado pelo Event Hub): job_streaming.py / job_streaming_continuous.py → job_streaming_to_gold.py / job_streaming_to_gold_continuous.py → job_carga_sql_streaming.py
+Streaming (job separado, alimentado pelo Event Hub): job_streaming.py / job_streaming_continuous.py → job_streaming_to_gold.py / job_streaming_to_gold_continuous.py, gravando direto nas tabelas Gold de tempo real.
 
 Agendamento: 0 6 * * * (06:00, America/Sao_Paulo)
 
@@ -655,7 +651,7 @@ case-santander-data-master/
     docker-compose.prod.yml  → enterprise, CeleryExecutor (7 containers)
     grafana/                 → dashboards e provisioning (Airflow, Databricks, pipeline, streaming)
  docs/                       → 20+ documentos técnicos (arquitetura, CDC, CI/CD, segurança, Terraform...)
- jobs/                       → 1 job por domínio × camada (28 arquivos)
+ jobs/                       → 1 job por domínio × camada (23 arquivos)
     job_unity_catalog.py
     job_extracao_{acoes,bcb,world_bank}.py
     job_clientes_ordens.py · job_clientes_silver.py
@@ -664,7 +660,6 @@ case-santander-data-master/
     job_corretora_analises.py · job_scd.py
     job_streaming.py · job_streaming_continuous.py
     job_streaming_to_gold.py · job_streaming_to_gold_continuous.py
-    job_carga_sql_{acoes,clientes,fraude,macro,streaming}.py
     job_lakehouse_monitoring.py · job_observabilidade.py
  scripts/                    → automação e utilitários operacionais
     auto_generate_dag.py · sync_airflow_from_databricks.py · setup_airflow_env.py
@@ -729,7 +724,7 @@ case-santander-data-master/
 → Azure Monitor + Log Analytics
 → Workspaces separados por ambiente
 → Modelo de ML para previsão de churn
-→ Power BI integrado ao SQL Database
+→ Power BI conectado ao SQL Warehouse (Databricks) sobre as tabelas Gold
 → Azure Container Apps para Airflow em produção
 → Delta Sharing para compartilhamento externo
 

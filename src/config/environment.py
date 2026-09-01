@@ -70,8 +70,6 @@ class EnvironmentConfig:
                 "schema_prefix": "hk_",  # Schemas: hk_bronze, hk_silver, hk_gold
                 "eventhub_ns": "evhcasesantander-hk",
                 "eventhub_name": "transacoes-financeiras-hk",
-                "sql_server": "sqlsvr-case-santander-hk.database.windows.net",
-                "sql_database": "sqldb-case-santander-hk",
                 "databricks_workspace": "adb-xxx-hk.azuredatabricks.net",
                 "api_rate_limit": {
                     "yahoo_finance": 15,  # requests/min (reduzido)
@@ -90,8 +88,6 @@ class EnvironmentConfig:
                 "schema_prefix": "prod_",  # Schemas: prod_bronze, prod_silver, prod_gold
                 "eventhub_ns": "evhcasesantander",
                 "eventhub_name": "transacoes-financeiras",
-                "sql_server": "sqlsvr-case-santander.database.windows.net",
-                "sql_database": "sqldb-case-santander",
                 "databricks_workspace": "adb-xxx.azuredatabricks.net",
                 "api_rate_limit": {
                     "yahoo_finance": 30,  # requests/min (completo)

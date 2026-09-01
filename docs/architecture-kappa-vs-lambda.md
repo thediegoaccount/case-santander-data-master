@@ -37,7 +37,7 @@
 
  SERVING LAYER                                              
                                                              
-  Gold Tables → Azure SQL → Dashboard                      
+  Gold Tables → SQL Warehouse → Dashboard                 
   - Consolidação de batch + streaming                       
 
 ```

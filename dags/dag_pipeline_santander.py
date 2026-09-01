@@ -152,36 +152,6 @@ with DAG(
         job_path="jobs/job_gold_fraude.py"
     )
 
-    # Carga SQL Ações
-    t_sql_acoes = databricks_task(
-        task_id="t_sql_acoes",
-        job_path="jobs/job_carga_sql_acoes.py"
-    )
-
-    # Carga SQL Fraude
-    t_sql_fraude = databricks_task(
-        task_id="t_sql_fraude",
-        job_path="jobs/job_carga_sql_fraude.py"
-    )
-
-    # Carga SQL Clientes
-    t_sql_clientes = databricks_task(
-        task_id="t_sql_clientes",
-        job_path="jobs/job_carga_sql_clientes.py"
-    )
-
-    # Carga SQL Macro
-    t_sql_macro = databricks_task(
-        task_id="t_sql_macro",
-        job_path="jobs/job_carga_sql_macro.py"
-    )
-
-    # Carga SQL Streaming — tabelas real-time (fraude_streaming, anomalias_intraday, volume_intraday, ranking_acoes_realtime)
-    t_sql_streaming = databricks_task(
-        task_id="t_sql_streaming",
-        job_path="jobs/job_carga_sql_streaming.py"
-    )
-
     # Lakehouse Monitoring
     t8_lakehouse_monitoring = databricks_task(
         task_id="t8_lakehouse_monitoring",
@@ -211,13 +181,8 @@ with DAG(
     [t6_clientes_silver] >> t7_corretora_analises
     [t7_corretora_analises] >> t9_scd
     [t9_scd] >> t3_fraude
-    [t3_anomalias, t3_acoes_cambio] >> t_sql_acoes
-    [t3_fraude] >> t_sql_fraude
-    [t7_corretora_analises, t9_scd] >> t_sql_clientes
-    [t3_bcb, t3_world_bank, t3_acoes_cambio] >> t_sql_macro
-    [t0_unity_catalog] >> t_sql_streaming
-    [t_sql_acoes, t_sql_clientes, t_sql_fraude, t_sql_streaming, t_sql_macro] >> t8_lakehouse_monitoring
-    [t_sql_acoes, t_sql_clientes, t_sql_fraude, t_sql_streaming, t_sql_macro] >> t4_observabilidade
+    [t3_anomalias, t3_acoes_cambio, t3_world_bank, t3_fraude] >> t8_lakehouse_monitoring
+    [t8_lakehouse_monitoring] >> t4_observabilidade
 
 # Este DAG foi gerado automaticamente a partir de databricks.yml
 # Reflete as dependências do workflow pai pipeline_completo

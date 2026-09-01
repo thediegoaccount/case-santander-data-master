@@ -67,7 +67,7 @@
 # MAGIC                                                                                           
 # MAGIC   Yahoo Finance acoes               acoes         anomalias                  
 # MAGIC   BCB API       bcb                 bcb                performance_acoes           
-# MAGIC   World Bank    world_bank           world_bank                           Azure SQL 
+# MAGIC   World Bank    world_bank           world_bank                        SQL Warehouse
 # MAGIC   Kaggle        clientes LGPDclientes score_risco      Genie AI  
 # MAGIC                        ordens               ordens             deteccao_fraude  Dashboard  
 # MAGIC   Event Hub kafka               streaming      fraude_streaming            
@@ -1039,8 +1039,8 @@ DESCRIBE HISTORY case_santander.silver.acoes LIMIT 5;
 # MAGIC                                                                          
 # MAGIC                                                              
 # MAGIC                                                                                    
-# MAGIC                                                      t8_lakehouse_monitor     t_carga_sql
-# MAGIC                                                      (14 tabelas)             (Azure SQL)
+# MAGIC                                                      t8_lakehouse_monitor
+# MAGIC                                                      (14 tabelas)
 # MAGIC                                                              
 # MAGIC                                                                          
 # MAGIC                                                                t4_observabilidade
@@ -1105,7 +1105,6 @@ SEGURANÇA — Padrão adotado em src/config/settings.py
   tenant_id     = dbutils.secrets.get(scope="kv-case-santander", key="tenant-id")
   client_secret = dbutils.secrets.get(scope="kv-case-santander", key="client-secret")
   storage_acct  = dbutils.secrets.get(scope="kv-case-santander", key="storage-account")
-  sql_conn      = dbutils.secrets.get(scope="kv-case-santander", key="sql-connection-string")
 
   # Autenticação ADLS: Service Principal OAuth2
   spark.conf.set(f"fs.azure.account.auth.type.{storage}.dfs.core.windows.net", "OAuth")
@@ -1367,7 +1366,7 @@ print("""
                                                                                   
   TECNOLOGIAS:                                                                    
     Azure Databricks 15.4 LTS  · Apache Spark 3.5.0  · Delta Lake                
-    Azure Event Hub (Kafka)    · ADLS Gen2            · Azure SQL Database        
+    Azure Event Hub (Kafka)    · ADLS Gen2            · Databricks SQL Warehouse  
     Apache Airflow             · Docker               · GitHub Actions            
     Unity Catalog              · Azure Key Vault      · Python 3.11               
 

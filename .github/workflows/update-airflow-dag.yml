@@ -141,7 +141,13 @@ jobs:
       
       - name: Install Airflow
         run: |
-          pip install apache-airflow
+          # Versão fixa + constraints oficial: sem isso o pip resolve o Airflow mais recente
+          # (que exige Python >= 3.10) e faz backtracking imprevisível neste job em 3.9.
+          # O DAG gerado usa apenas o core (DAG + PythonOperator), não precisa do provider.
+          AIRFLOW_VERSION=2.7.0
+          PY_VERSION=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+          CONSTRAINTS="https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PY_VERSION}.txt"
+          pip install "apache-airflow==${AIRFLOW_VERSION}" --constraint "${CONSTRAINTS}"
       
       - name: Validate DAG syntax
         run: |

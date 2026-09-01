@@ -52,7 +52,6 @@ GOLD (Dados Analíticos)
 | Azure Data Factory | `adf-case-santander` | Orquestração batch (05:00 diário) |
 | Azure Event Hub | `evhcasesantander` | Streaming de transações financeiras |
 | Azure Key Vault | `kv-case-santander` | Gestão de segredos e credenciais |
-| Azure SQL Database | `sqldb-case-santander` | Serving layer para dashboards |
 | Unity Catalog | `case_santander` | Governança e catálogo de dados |
 | GitHub Actions | `.github/workflows/ci-cd.yml` | CI/CD multi-ambiente (dev/hk/prod) |
 | Apache Airflow | `docker/docker-compose.yml` | Orquestração local via Docker |
@@ -107,7 +106,6 @@ jobs/
  job_streaming_to_gold.py     # t10 — silver.streaming → 4 tabelas Gold (CDC + broadcast)
  job_clientes_ordens.py       # t6 — Ingestão Kaggle + ordens simuladas
  job_lakehouse_monitoring.py  # t8 — Lakehouse Monitoring via SDK
- job_carga_sql.py             # t_sql — Carga das tabelas Gold no Azure SQL
 
 dags/
  dag_pipeline_santander.py    # DAG Airflow — orquestra via API Databricks
@@ -498,7 +496,6 @@ Notebook 11 refatorado. Executa:
 3. **Perfil de clientes** → `gold.perfil_clientes`
 4. **Ordens consolidadas** → `gold.ordens_consolidadas`
 5. **Ranking ações** → `gold.ranking_acoes_perfil`
-6. **Carga SQL** → tabelas dbo.* no Azure SQL Database
 
 > `F.broadcast(df_clientes)` aplicado no join com `df_posicao` — df_clientes projetado em 4 colunas (~10.000 linhas, < 1 MB).
 
@@ -1023,7 +1020,6 @@ response = requests.get(url, auth=(kaggle_username, kaggle_key), stream=True)
 | `client-secret` | Credencial Service Principal |
 | `storage-account` | Nome da conta ADLS Gen2 |
 | `eventhub-connection-string` | Conexão Event Hub |
-| `sql-connection-string` | Conexão Azure SQL Database |
 | `kaggle-username` | Autenticação Kaggle API |
 | `kaggle-key` | Chave Kaggle API |
 
@@ -1037,8 +1033,6 @@ response = requests.get(url, auth=(kaggle_username, kaggle_key), stream=True)
 |---|---|---|
 | `STORAGE_ACCOUNT` | `stcasesantander` | Conta ADLS Gen2 |
 | `EVENTHUB_NAME` | `transacoes-financeiras` | Event Hub |
-| `SQL_SERVER` | `sqlsvr-case-santander.database.windows.net` | Azure SQL |
-| `SQL_DATABASE` | `sqldb-case-santander` | Banco de dados |
 | `CATALOG` | `case_santander` | Unity Catalog |
 | `ACOES` | Lista de 9 tickers | Ações B3 monitoradas |
 
@@ -1390,8 +1384,8 @@ t5 >> t2
 t6 >> [t2, t7]
 t7 >> t9
 [t2, t9] >> t3
-t3 >> [t8, t_sql]
-[t8, t_sql] >> t4
+t3 >> t8
+t8 >> t4
 ```
 
 ---

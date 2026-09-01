@@ -64,7 +64,6 @@ def get_credentials(dbutils):
         "tenant_id": get_secret("tenant-id"),
         "client_secret": get_secret("client-secret"),
         "storage_account": get_secret("storage-account"),
-        "sql_conn": get_secret("sql-connection-string"),
         "kaggle_username": get_secret("kaggle-username"),
         "kaggle_key": get_secret("kaggle-key"),
     }

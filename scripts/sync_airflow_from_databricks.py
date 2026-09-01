@@ -276,11 +276,6 @@ with DAG(
             't9_scd': 'jobs/job_scd.py',
             't3_fraude': 'jobs/job_gold_fraude.py',
             't10_streaming_gold': 'jobs/job_streaming_to_gold.py',
-            't_sql_acoes': 'jobs/job_carga_sql_acoes.py',
-            't_sql_fraude': 'jobs/job_carga_sql_fraude.py',
-            't_sql_clientes': 'jobs/job_carga_sql_clientes.py',
-            't_sql_streaming': 'jobs/job_carga_sql_streaming.py',
-            't_sql_macro': 'jobs/job_carga_sql_macro.py',
             't8_lakehouse_monitoring': 'jobs/job_lakehouse_monitoring.py',
             't4_observabilidade': 'jobs/job_observabilidade.py',
         }

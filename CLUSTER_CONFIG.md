@@ -116,43 +116,6 @@ resources:
         pause_status: UNPAUSED
 
     # ═══════════════════════════════════════════════════════
-    # SQL LOAD JOBS (executam cargas rápidas)
-    # ═══════════════════════════════════════════════════════
-    
-    t_carga_sql_acoes:
-      name: "[${var.environment}] Carga SQL - Ações"
-      description: "Carrega 2 tabelas no SQL Database"
-      
-      tasks:
-        - task_key: sql_acoes
-          python_wheel_task:
-            package_name: case_santander
-            entry_point: jobs.job_carga_sql_acoes
-          
-          # JOB CLUSTER: Pequeno (cargas são rápidas)
-          new_cluster:
-            spark_version: "14.3.x-scala2.12"
-            node_type_id: "i3.xlarge"
-            num_workers: 2                      # Apenas 3 nodes
-            
-            aws_attributes:
-              availability: "SPOT"              # Super barato
-              zone_id: "us-west-2a"
-            
-            idle_timeout_minutes: 10            # Kill mais rápido
-            
-            spark_conf:
-              "spark.sql.shuffle.partitions": "100"  # Menos partições
-          
-          timeout_seconds: 1800                 # 30 min (já é rápido)
-          max_retries: 2
-
-      schedule:
-        quartz_cron_expression: "0 15 * * ?"   # 15:00
-        timezone_id: "America/Sao_Paulo"
-        pause_status: UNPAUSED
-
-    # ═══════════════════════════════════════════════════════
     # HEAVY JOBS (processamento pesado)
     # ═══════════════════════════════════════════════════════
     
@@ -209,13 +172,6 @@ bundle:
                 new_cluster:
                   node_type_id: "i3.xlarge"
                   num_workers: 2              # MENOR (dev)
-          
-          t_carga_sql_acoes:
-            tasks:
-              - task_key: sql_acoes
-                new_cluster:
-                  node_type_id: "i3.xlarge"
-                  num_workers: 1              # MÍNIMO (dev)
 
     # PRODUÇÃO: Clusters maiores (confiabilidade)
     prod:
@@ -227,13 +183,6 @@ bundle:
                 new_cluster:
                   node_type_id: "i3.xlarge"
                   num_workers: 4              # MAIOR (prod)
-          
-          t_carga_sql_acoes:
-            tasks:
-              - task_key: sql_acoes
-                new_cluster:
-                  node_type_id: "i3.xlarge"
-                  num_workers: 2              # NORMAL (prod)
 ```
 
 ---
@@ -517,56 +466,6 @@ resources:
               availability: "SPOT"
             idle_timeout_minutes: 15
 
-    # SQL LOAD JOBS: 2 workers (cargas rápidas)
-    t_carga_sql_acoes:
-      tasks:
-        - new_cluster:
-            spark_version: "14.3.x-scala2.12"
-            node_type_id: "i3.xlarge"
-            num_workers: 2              # Menos workers
-            aws_attributes:
-              availability: "SPOT"
-            idle_timeout_minutes: 10    # Termina mais rápido
-
-    t_carga_sql_clientes:
-      tasks:
-        - new_cluster:
-            spark_version: "14.3.x-scala2.12"
-            node_type_id: "i3.xlarge"
-            num_workers: 2
-            aws_attributes:
-              availability: "SPOT"
-            idle_timeout_minutes: 10
-
-    t_carga_sql_fraude:
-      tasks:
-        - new_cluster:
-            spark_version: "14.3.x-scala2.12"
-            node_type_id: "i3.xlarge"
-            num_workers: 2
-            aws_attributes:
-              availability: "SPOT"
-            idle_timeout_minutes: 10
-
-    t_carga_sql_streaming:
-      tasks:
-        - new_cluster:
-            spark_version: "14.3.x-scala2.12"
-            node_type_id: "i3.xlarge"
-            num_workers: 2
-            aws_attributes:
-              availability: "SPOT"
-            idle_timeout_minutes: 10
-
-    t_carga_sql_macro:
-      tasks:
-        - new_cluster:
-            spark_version: "14.3.x-scala2.12"
-            node_type_id: "i3.xlarge"
-            num_workers: 2
-            aws_attributes:
-              availability: "SPOT"
-            idle_timeout_minutes: 10
 ```
 
 ---

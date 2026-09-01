@@ -16,7 +16,6 @@ from datetime import datetime
 
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
-from src.config.secrets import get_secret
 from pyspark.sql import functions as F
 
 
@@ -25,7 +24,6 @@ def main():
     info("job_corretora_analises", f"=== JOB CORRETORA ANALISES INICIADO: {inicio} ===")
 
     spark = DatabricksSession.builder.getOrCreate()
-    sql_conn = get_secret("sql-connection-string")
     data_hoje = datetime.now().strftime("%Y-%m-%d")
 
     # GOLD 1 — Posicao do cliente (carteira)
@@ -170,27 +168,6 @@ def main():
         .saveAsTable("case_santander.gold.ranking_acoes_perfil")
     info("job_corretora_analises", " gold.ranking_acoes_perfil gravado")
 
-    # Carga SQL Database
-    info("job_corretora_analises", "Carregando no SQL Database...")
-    tabelas_sql = [
-        ("case_santander.gold.perfil_clientes",    "dbo.perfil_clientes"),
-        ("case_santander.gold.ordens_consolidadas","dbo.ordens_consolidadas"),
-        ("case_santander.gold.ranking_acoes_perfil","dbo.ranking_acoes_perfil"),
-        ("case_santander.gold.posicao_clientes",   "dbo.posicao_clientes"),
-        ("case_santander.gold.score_risco_clientes","dbo.score_risco_clientes"),
-    ]
-
-    for tabela_uc, tabela_sql in tabelas_sql:
-        try:
-            df = spark.sql(f"SELECT * FROM {tabela_uc}")
-            df.write.format("jdbc") \
-                .option("url", sql_conn) \
-                .option("dbtable", tabela_sql) \
-                .option("driver", "com.microsoft.sqlserver.jdbc.SQLServerDriver") \
-                .mode("overwrite").save()
-            info("job_corretora_analises", f"   {tabela_sql} carregado")
-        except Exception as e:
-            info("job_corretora_analises", f"   {tabela_sql} → {e}")
     # fmt: on
 
     fim = datetime.now()

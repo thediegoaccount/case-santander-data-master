@@ -64,8 +64,3 @@ def get_kaggle_key():
 def get_salt():
     """Recupera salt do Key Vault (para anonimização)"""
     return get_secret("salt")
-
-
-def get_sql_connection_string():
-    """Recupera sql-connection-string do Key Vault"""
-    return get_secret("sql-connection-string")
