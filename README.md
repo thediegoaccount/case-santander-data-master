@@ -41,6 +41,10 @@ dados em ambiente de nuvem Azure com Databricks
 
 ## II. Arquitetura de Solução e Arquitetura Técnica
 
+> **Decisões de arquitetura e seus trade-offs:** [`docs/adr/`](docs/adr/) — por que Lambda e não
+> Kappa, por que serving sem banco relacional, por que job clusters efêmeros (e o que se perde
+> em cada escolha).
+
 ### Visão geral da solução
 
 ```
