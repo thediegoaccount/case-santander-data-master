@@ -1,10 +1,14 @@
-# Dependencias de runtime do pipeline.
+# Dependencias para desenvolvimento local e para os jobs de CI que rodam
+# `pytest tests/` (ver .github/workflows/ci-cd.yml e test.yml).
 #
-# Antes esta lista nao declarava pyspark, pandas, delta-spark, databricks-sdk,
-# PyYAML nem python-dotenv, todos importados pelo codigo -- os workflows
-# instalavam pyyaml na mao para compensar. databricks-cli (o CLI legado
-# v0.18, sem o subcomando `bundle`) foi removido: o CLI em Go e instalado
-# no CI via databricks/setup-cli.
+# NAO inclui databricks-connect. Ele ocupa o MESMO namespace de import que o
+# pacote pyspark (nao e uma dependencia declarada via pip, ele reescreve os
+# arquivos de pyspark/ dentro do site-packages) -- instalar os dois juntos e
+# um conflito documentado pela propria Databricks, nao um erro de resolucao
+# do pip. tests/conftest.py usa SparkSession local (master("local[1]")),
+# que precisa do pyspark puro; databricks-connect e cliente para conectar a
+# um cluster remoto, uso exclusivo de jobs/*.py em execucao real. A
+# dependencia de runtime do wheel implantado continua declarada em setup.py.
 
 # Ingestao de dados
 yfinance==0.2.37
@@ -12,13 +16,9 @@ requests>=2.31.0
 azure-eventhub==5.15.1
 pandas>=2.0.0
 
-# Spark / Delta / Databricks
-# databricks-connect DEVE casar com a major.minor do DBR do cluster
-# (spark_version em databricks.yml). Ver DEPLOYMENT.md.
+# Spark / Delta (testes locais, SparkSession master("local[1]"))
 pyspark==3.5.0
 delta-spark==3.1.0
-databricks-connect==14.3.*
-databricks-sdk>=0.20.0
 
 # Configuracao
 PyYAML>=6.0
