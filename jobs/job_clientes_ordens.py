@@ -27,6 +27,7 @@ from delta.tables import DeltaTable
 
 from src.config.settings import configure_adls
 from src.security.hashing import hash_with_salt, hash_customer_id, hash_surname
+from src.config.tables import SCHEMA_BRONZE, SCHEMA_SILVER
 
 
 def hash_id(valor):
@@ -131,7 +132,7 @@ def main():
 
     # Gravar clientes no Bronze com CDC (MERGE)
     df_clientes_spark = spark.createDataFrame(df_clientes_final)
-    tabela_clientes_bronze = "case_santander.bronze.clientes"
+    tabela_clientes_bronze = f"{SCHEMA_BRONZE}.clientes"
     
     try:
         # Tentar MERGE para CDC (apenas mudanças)
@@ -194,7 +195,7 @@ def main():
             })
 
     df_ordens_spark = spark.createDataFrame(pd.DataFrame(ordens))
-    tabela_ordens_bronze = "case_santander.bronze.ordens"
+    tabela_ordens_bronze = f"{SCHEMA_BRONZE}.ordens"
     
     try:
         # Tentar MERGE para CDC (apenas mudanças)
@@ -221,7 +222,7 @@ def main():
             raise e
 
     # Silver — clientes com CDC (MERGE)
-    df_clientes_silver = spark.sql("SELECT * FROM case_santander.bronze.clientes") \
+    df_clientes_silver = spark.sql(f"SELECT * FROM {SCHEMA_BRONZE}.clientes") \
         .withColumn("faixa_etaria",
             F.when(F.col("idade") < 30, "Jovem")
             .when(F.col("idade") < 50, "Adulto")
@@ -233,7 +234,7 @@ def main():
             .otherwise("Ruim")) \
         .withColumn("data_processamento", F.lit(data_hoje))
     
-    tabela_clientes_silver = "case_santander.silver.clientes"
+    tabela_clientes_silver = f"{SCHEMA_SILVER}.clientes"
     
     try:
         # Tentar MERGE para CDC (apenas mudanças)
@@ -261,13 +262,13 @@ def main():
             raise e
 
     # Silver — ordens com CDC (MERGE)
-    df_ordens_silver = spark.sql("SELECT * FROM case_santander.bronze.ordens") \
+    df_ordens_silver = spark.sql(f"SELECT * FROM {SCHEMA_BRONZE}.ordens") \
         .withColumn("data_ordem", F.to_date("data_ordem")) \
         .withColumn("ano",        F.year("data_ordem")) \
         .withColumn("mes",        F.month("data_ordem")) \
         .withColumn("data_processamento", F.lit(data_hoje))
     
-    tabela_ordens_silver = "case_santander.silver.ordens"
+    tabela_ordens_silver = f"{SCHEMA_SILVER}.ordens"
     
     try:
         # Tentar MERGE para CDC (apenas mudanças)
@@ -301,5 +302,5 @@ def main():
     info("job_clientes_ordens", f"Total ordens geradas: {len(ordens)}")
     info("job_clientes_ordens", " CDC implementado: MERGE para clientes e ordens")
 
-
-main()
+if __name__ == "__main__":
+    main()

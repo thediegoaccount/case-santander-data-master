@@ -3,10 +3,10 @@ Job: Gold World Bank Contexto Macroeconômico
 Analisa PIB e Desemprego para contexto global.
 
 Depende de:
-  - case_santander.silver.world_bank
+  - <catalog>.<env>_silver.world_bank
 
 Produz:
-  - case_santander.gold.contexto_macroeconomico
+  - <catalog>.<env>_gold.contexto_macroeconomico
 
 Ou via Databricks Workflow:
     Task: t3_gold_world_bank
@@ -26,6 +26,7 @@ from src.config.secrets import get_secret
 
 from src.config.settings import configure_adls
 from src.gold.world_bank_analise import analisar_contexto_macro
+from src.config.tables import SCHEMA_GOLD, SCHEMA_SILVER
 
 
 def main():
@@ -47,5 +48,5 @@ def main():
     info("job_gold_world_bank", "\n=== JOB GOLD WORLD BANK CONCLUIDO ===")
     info("job_gold_world_bank", f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
-
-main()
+if __name__ == "__main__":
+    main()

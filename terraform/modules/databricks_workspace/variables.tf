@@ -25,8 +25,8 @@ variable "sku" {
   default     = "premium"
 }
 
-variable "managed_resource_group_id" {
-  description = "Managed resource group ID"
+variable "managed_resource_group_name" {
+  description = "Nome do managed resource group criado pelo Databricks"
   type        = string
   default     = null
 }

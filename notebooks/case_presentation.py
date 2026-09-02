@@ -28,6 +28,27 @@
 # MAGIC | 12 | Q&A — perguntas da banca | Respostas técnicas preparadas |
 
 # COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Configuracao de ambiente
+# MAGIC
+# MAGIC Os schemas sao resolvidos a partir de `ENVIRONMENT` (hk/prod) e
+# MAGIC expostos como widgets, para que as celulas `%sql` apontem para o
+# MAGIC ambiente correto. Antes o notebook fixava `case_santander.bronze`
+# MAGIC etc., ignorando o isolamento entre homologacao e producao.
+
+# COMMAND ----------
+
+from src.config.tables import SCHEMA_BRONZE, SCHEMA_GOLD, SCHEMA_SILVER
+
+dbutils.widgets.text("schema_bronze", SCHEMA_BRONZE)
+dbutils.widgets.text("schema_silver", SCHEMA_SILVER)
+dbutils.widgets.text("schema_gold", SCHEMA_GOLD)
+
+print(f"bronze: {SCHEMA_BRONZE}")
+print(f"silver: {SCHEMA_SILVER}")
+print(f"gold:   {SCHEMA_GOLD}")
+
 # MAGIC %md
 # MAGIC ---
 # MAGIC ## 1. Contexto de Negócio e Arquitetura
@@ -132,41 +153,41 @@ for i, acao in enumerate(ACOES, 1):
 # COMMAND ----------
 
 # MAGIC %sql
--- Visão geral: tabelas Bronze no Unity Catalog
-SHOW TABLES IN case_santander.bronze;
+# MAGIC -- Visão geral: tabelas Bronze no Unity Catalog
+# MAGIC SHOW TABLES IN ${schema_bronze};
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Volume por tabela Bronze
-SELECT 'bronze.acoes'      AS tabela, COUNT(*) AS registros FROM case_santander.bronze.acoes     UNION ALL
-SELECT 'bronze.bcb',                  COUNT(*)              FROM case_santander.bronze.bcb        UNION ALL
-SELECT 'bronze.world_bank',           COUNT(*)              FROM case_santander.bronze.world_bank UNION ALL
-SELECT 'bronze.clientes',             COUNT(*)              FROM case_santander.bronze.clientes   UNION ALL
-SELECT 'bronze.ordens',               COUNT(*)              FROM case_santander.bronze.ordens     UNION ALL
-SELECT 'bronze.kafka',                COUNT(*)              FROM case_santander.bronze.kafka
-ORDER BY registros DESC;
+# MAGIC -- Volume por tabela Bronze
+# MAGIC SELECT 'bronze.acoes'      AS tabela, COUNT(*) AS registros FROM ${schema_bronze}.acoes     UNION ALL
+# MAGIC SELECT 'bronze.bcb',                  COUNT(*)              FROM ${schema_bronze}.bcb        UNION ALL
+# MAGIC SELECT 'bronze.world_bank',           COUNT(*)              FROM ${schema_bronze}.world_bank UNION ALL
+# MAGIC SELECT 'bronze.clientes',             COUNT(*)              FROM ${schema_bronze}.clientes   UNION ALL
+# MAGIC SELECT 'bronze.ordens',               COUNT(*)              FROM ${schema_bronze}.ordens     UNION ALL
+# MAGIC SELECT 'bronze.kafka',                COUNT(*)              FROM ${schema_bronze}.kafka
+# MAGIC ORDER BY registros DESC;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Amostra Bronze: ações brutas exatamente como vieram do Yahoo Finance
--- Sem variação %, sem empresa, sem setor — dado bruto e fiel à fonte
-SELECT date, ticker, open, high, low, close, volume, data_extracao
-FROM case_santander.bronze.acoes
-WHERE ticker = 'SANB11.SA'
-ORDER BY date DESC
-LIMIT 8;
+# MAGIC -- Amostra Bronze: ações brutas exatamente como vieram do Yahoo Finance
+# MAGIC -- Sem variação %, sem empresa, sem setor — dado bruto e fiel à fonte
+# MAGIC SELECT date, ticker, open, high, low, close, volume, data_extracao
+# MAGIC FROM ${schema_bronze}.acoes
+# MAGIC WHERE ticker = 'SANB11.SA'
+# MAGIC ORDER BY date DESC
+# MAGIC LIMIT 8;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Bronze BCB: indicadores macroeconômicos brutos
--- Particionado por extracao (não por data) para evitar conflito de colunas
-SELECT data, indicador, valor, extracao
-FROM case_santander.bronze.bcb
-ORDER BY indicador, data DESC
-LIMIT 10;
+# MAGIC -- Bronze BCB: indicadores macroeconômicos brutos
+# MAGIC -- Particionado por extracao (não por data) para evitar conflito de colunas
+# MAGIC SELECT data, indicador, valor, extracao
+# MAGIC FROM ${schema_bronze}.bcb
+# MAGIC ORDER BY indicador, data DESC
+# MAGIC LIMIT 10;
 
 # COMMAND ----------
 # MAGIC %md
@@ -184,73 +205,73 @@ LIMIT 10;
 # COMMAND ----------
 
 # MAGIC %sql
--- ANTES (Bronze): tipos inferidos, sem contexto de negócio
-DESCRIBE TABLE case_santander.bronze.acoes;
+# MAGIC -- ANTES (Bronze): tipos inferidos, sem contexto de negócio
+# MAGIC DESCRIBE TABLE ${schema_bronze}.acoes;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- DEPOIS (Silver): tipos corretos + features derivadas de negócio
-DESCRIBE TABLE case_santander.silver.acoes;
+# MAGIC -- DEPOIS (Silver): tipos corretos + features derivadas de negócio
+# MAGIC DESCRIBE TABLE ${schema_silver}.acoes;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Comparação direta Bronze vs Silver para o mesmo ticker
-SELECT
-    'BRONZE' AS camada,
-    CAST(date AS STRING) AS date,
-    ticker,
-    ROUND(open, 2) AS open, ROUND(close, 2) AS close,
-    volume,
-    CAST(NULL AS DOUBLE)  AS variacao_pct,
-    CAST(NULL AS STRING)  AS empresa,
-    CAST(NULL AS STRING)  AS setor
-FROM case_santander.bronze.acoes
-WHERE ticker = 'SANB11.SA'
-UNION ALL
-SELECT
-    'SILVER',
-    CAST(date AS STRING),
-    ticker,
-    ROUND(open, 2), ROUND(close, 2),
-    volume,
-    ROUND(variacao_diaria_pct, 4),
-    empresa,
-    setor
-FROM case_santander.silver.acoes
-WHERE ticker = 'SANB11.SA'
-ORDER BY date DESC, camada
-LIMIT 16;
+# MAGIC -- Comparação direta Bronze vs Silver para o mesmo ticker
+# MAGIC SELECT
+# MAGIC     'BRONZE' AS camada,
+# MAGIC     CAST(date AS STRING) AS date,
+# MAGIC     ticker,
+# MAGIC     ROUND(open, 2) AS open, ROUND(close, 2) AS close,
+# MAGIC     volume,
+# MAGIC     CAST(NULL AS DOUBLE)  AS variacao_pct,
+# MAGIC     CAST(NULL AS STRING)  AS empresa,
+# MAGIC     CAST(NULL AS STRING)  AS setor
+# MAGIC FROM ${schema_bronze}.acoes
+# MAGIC WHERE ticker = 'SANB11.SA'
+# MAGIC UNION ALL
+# MAGIC SELECT
+# MAGIC     'SILVER',
+# MAGIC     CAST(date AS STRING),
+# MAGIC     ticker,
+# MAGIC     ROUND(open, 2), ROUND(close, 2),
+# MAGIC     volume,
+# MAGIC     ROUND(variacao_diaria_pct, 4),
+# MAGIC     empresa,
+# MAGIC     setor
+# MAGIC FROM ${schema_silver}.acoes
+# MAGIC WHERE ticker = 'SANB11.SA'
+# MAGIC ORDER BY date DESC, camada
+# MAGIC LIMIT 16;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Features derivadas na Silver: distribuição por setor
-SELECT
-    setor,
-    COUNT(DISTINCT ticker)                     AS tickers,
-    COUNT(*)                                   AS registros,
-    ROUND(AVG(variacao_diaria_pct), 4)         AS variacao_media_pct,
-    ROUND(AVG(amplitude_diaria), 4)            AS amplitude_media,
-    ROUND(AVG(volume) / 1e6, 2)               AS volume_medio_M
-FROM case_santander.silver.acoes
-GROUP BY setor
-ORDER BY volume_medio_M DESC;
+# MAGIC -- Features derivadas na Silver: distribuição por setor
+# MAGIC SELECT
+# MAGIC     setor,
+# MAGIC     COUNT(DISTINCT ticker)                     AS tickers,
+# MAGIC     COUNT(*)                                   AS registros,
+# MAGIC     ROUND(AVG(variacao_diaria_pct), 4)         AS variacao_media_pct,
+# MAGIC     ROUND(AVG(amplitude_diaria), 4)            AS amplitude_media,
+# MAGIC     ROUND(AVG(volume) / 1e6, 2)               AS volume_medio_M
+# MAGIC FROM ${schema_silver}.acoes
+# MAGIC GROUP BY setor
+# MAGIC ORDER BY volume_medio_M DESC;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Silver BCB: datas tipadas, precisão financeira de 6 casas decimais
-SELECT
-    data, indicador,
-    ROUND(valor, 6) AS valor,
-    ano, mes, trimestre
-FROM case_santander.silver.bcb
-WHERE indicador IN ('selic', 'cambio_usd')
-  AND ano = 2024
-ORDER BY data DESC
-LIMIT 10;
+# MAGIC -- Silver BCB: datas tipadas, precisão financeira de 6 casas decimais
+# MAGIC SELECT
+# MAGIC     data, indicador,
+# MAGIC     ROUND(valor, 6) AS valor,
+# MAGIC     ano, mes, trimestre
+# MAGIC FROM ${schema_silver}.bcb
+# MAGIC WHERE indicador IN ('selic', 'cambio_usd')
+# MAGIC   AND ano = 2024
+# MAGIC ORDER BY data DESC
+# MAGIC LIMIT 10;
 
 # COMMAND ----------
 # MAGIC %md
@@ -284,37 +305,37 @@ print("   Telefone    Endereço")
 # COMMAND ----------
 
 # MAGIC %sql
--- Silver Clientes: perfil com LGPD + features derivadas
-SELECT
-    id_cliente,
-    hash_cliente,        -- SHA-256 truncado: jamais o CustomerID original
-    sobrenome_masked,    -- "Silva" → "S****"
-    idade,
-    faixa_etaria,        -- feature nova: "30-39", "40-49" etc.
-    score_credito,
-    score_categoria,     -- Baixo / Médio / Alto
-    perfil_risco,
-    saldo,
-    faixa_saldo,
-    ativo,
-    churn
-FROM case_santander.silver.clientes
-LIMIT 10;
+# MAGIC -- Silver Clientes: perfil com LGPD + features derivadas
+# MAGIC SELECT
+# MAGIC     id_cliente,
+# MAGIC     hash_cliente,        -- SHA-256 truncado: jamais o CustomerID original
+# MAGIC     sobrenome_masked,    -- "Silva" → "S****"
+# MAGIC     idade,
+# MAGIC     faixa_etaria,        -- feature nova: "30-39", "40-49" etc.
+# MAGIC     score_credito,
+# MAGIC     score_categoria,     -- Baixo / Médio / Alto
+# MAGIC     perfil_risco,
+# MAGIC     saldo,
+# MAGIC     faixa_saldo,
+# MAGIC     ativo,
+# MAGIC     churn
+# MAGIC FROM ${schema_silver}.clientes
+# MAGIC LIMIT 10;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Distribuição de perfil de risco
-SELECT
-    perfil_risco,
-    COUNT(*)                                                    AS clientes,
-    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 1)          AS pct,
-    ROUND(AVG(score_credito), 0)                               AS score_medio,
-    ROUND(AVG(saldo), 2)                                       AS saldo_medio,
-    SUM(CASE WHEN churn = true THEN 1 ELSE 0 END)              AS churners
-FROM case_santander.silver.clientes
-GROUP BY perfil_risco
-ORDER BY clientes DESC;
+# MAGIC -- Distribuição de perfil de risco
+# MAGIC SELECT
+# MAGIC     perfil_risco,
+# MAGIC     COUNT(*)                                                    AS clientes,
+# MAGIC     ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 1)          AS pct,
+# MAGIC     ROUND(AVG(score_credito), 0)                               AS score_medio,
+# MAGIC     ROUND(AVG(saldo), 2)                                       AS saldo_medio,
+# MAGIC     SUM(CASE WHEN churn = true THEN 1 ELSE 0 END)              AS churners
+# MAGIC FROM ${schema_silver}.clientes
+# MAGIC GROUP BY perfil_risco
+# MAGIC ORDER BY clientes DESC;
 
 # COMMAND ----------
 # MAGIC %md
@@ -367,7 +388,7 @@ df_stream.writeStream \\
     .trigger(availableNow=True)    # micro-batch sob demanda
     .option("checkpointLocation", checkpoint_path) \\
     .option("mergeSchema", "true") \\
-    .toTable("case_santander.bronze.kafka")
+    .toTable("<catalog>.<env>_bronze.kafka")
 
 Propriedades:
    Exactly-once: checkpoint garante sem duplicação mesmo após crash
@@ -378,58 +399,58 @@ Propriedades:
 # COMMAND ----------
 
 # MAGIC %sql
--- Amostra das transações streaming processadas
-SELECT
-    id_transacao,
-    timestamp,
-    ticker,
-    ROUND(preco, 2)       AS preco,
-    quantidade,
-    tipo,                 -- compra / venda
-    ROUND(valor_total, 2) AS valor_total,
-    alerta_volume,        -- Normal / Volume Medio / Volume Alto
-    alerta_preco,         -- Normal / Preco Alto / Preco Baixo
-    hora,
-    minuto
-FROM case_santander.silver.streaming
-ORDER BY timestamp DESC
-LIMIT 10;
+# MAGIC -- Amostra das transações streaming processadas
+# MAGIC SELECT
+# MAGIC     id_transacao,
+# MAGIC     timestamp,
+# MAGIC     ticker,
+# MAGIC     ROUND(preco, 2)       AS preco,
+# MAGIC     quantidade,
+# MAGIC     tipo,                 -- compra / venda
+# MAGIC     ROUND(valor_total, 2) AS valor_total,
+# MAGIC     alerta_volume,        -- Normal / Volume Medio / Volume Alto
+# MAGIC     alerta_preco,         -- Normal / Preco Alto / Preco Baixo
+# MAGIC     hora,
+# MAGIC     minuto
+# MAGIC FROM ${schema_silver}.streaming
+# MAGIC ORDER BY timestamp DESC
+# MAGIC LIMIT 10;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Volume de transações por ticker e tipo
-SELECT
-    ticker,
-    tipo,
-    COUNT(*)                       AS transacoes,
-    SUM(quantidade)                AS volume_total,
-    ROUND(AVG(preco), 2)           AS preco_medio,
-    ROUND(SUM(valor_total), 0)     AS valor_financeiro_total
-FROM case_santander.silver.streaming
-GROUP BY ticker, tipo
-ORDER BY ticker, tipo;
+# MAGIC -- Volume de transações por ticker e tipo
+# MAGIC SELECT
+# MAGIC     ticker,
+# MAGIC     tipo,
+# MAGIC     COUNT(*)                       AS transacoes,
+# MAGIC     SUM(quantidade)                AS volume_total,
+# MAGIC     ROUND(AVG(preco), 2)           AS preco_medio,
+# MAGIC     ROUND(SUM(valor_total), 0)     AS valor_financeiro_total
+# MAGIC FROM ${schema_silver}.streaming
+# MAGIC GROUP BY ticker, tipo
+# MAGIC ORDER BY ticker, tipo;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- CDC habilitado em silver.streaming: confirmar configuração
-SHOW TBLPROPERTIES case_santander.silver.streaming;
+# MAGIC -- CDC habilitado em silver.streaming: confirmar configuração
+# MAGIC SHOW TBLPROPERTIES ${schema_silver}.streaming;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Leitura CDC: apenas inserções novas desde a versão 1
--- É exatamente o que o job_streaming_to_gold.py faz a cada execução
-SELECT
-    id_transacao, timestamp, ticker, tipo, preco, valor_total,
-    _change_type,
-    _commit_version,
-    _commit_timestamp
-FROM table_changes('case_santander.silver.streaming', 1)
-WHERE _change_type = 'insert'
-ORDER BY _commit_timestamp DESC
-LIMIT 15;
+# MAGIC -- Leitura CDC: apenas inserções novas desde a versão 1
+# MAGIC -- É exatamente o que o job_streaming_to_gold.py faz a cada execução
+# MAGIC SELECT
+# MAGIC     id_transacao, timestamp, ticker, tipo, preco, valor_total,
+# MAGIC     _change_type,
+# MAGIC     _commit_version,
+# MAGIC     _commit_timestamp
+# MAGIC FROM table_changes('${schema_silver}.streaming', 1)
+# MAGIC WHERE _change_type = 'insert'
+# MAGIC ORDER BY _commit_timestamp DESC
+# MAGIC LIMIT 15;
 
 # COMMAND ----------
 # MAGIC %md
@@ -469,51 +490,51 @@ LIMIT 15;
 # COMMAND ----------
 
 # MAGIC %sql
--- Distribuição de anomalias detectadas
-SELECT
-    tipo_anomalia,
-    COUNT(*)                                    AS ocorrencias,
-    ROUND(AVG(ABS(zscore)), 4)                 AS zscore_medio,
-    ROUND(MAX(ABS(zscore)), 4)                 AS zscore_maximo,
-    ROUND(AVG(ABS(variacao_diaria_pct)), 4)    AS variacao_media_abs_pct
-FROM case_santander.gold.anomalias
-GROUP BY tipo_anomalia
-ORDER BY ocorrencias DESC;
+# MAGIC -- Distribuição de anomalias detectadas
+# MAGIC SELECT
+# MAGIC     tipo_anomalia,
+# MAGIC     COUNT(*)                                    AS ocorrencias,
+# MAGIC     ROUND(AVG(ABS(zscore)), 4)                 AS zscore_medio,
+# MAGIC     ROUND(MAX(ABS(zscore)), 4)                 AS zscore_maximo,
+# MAGIC     ROUND(AVG(ABS(variacao_diaria_pct)), 4)    AS variacao_media_abs_pct
+# MAGIC FROM ${schema_gold}.anomalias
+# MAGIC GROUP BY tipo_anomalia
+# MAGIC ORDER BY ocorrencias DESC;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Top 10 anomalias mais extremas
-SELECT
-    date,
-    ticker,
-    empresa,
-    setor,
-    ROUND(close, 2)               AS preco_fechamento,
-    ROUND(variacao_diaria_pct, 4) AS variacao_pct,
-    ROUND(zscore, 4)              AS zscore,
-    tipo_anomalia
-FROM case_santander.gold.anomalias
-WHERE anomalia = true
-ORDER BY ABS(zscore) DESC
-LIMIT 10;
+# MAGIC -- Top 10 anomalias mais extremas
+# MAGIC SELECT
+# MAGIC     date,
+# MAGIC     ticker,
+# MAGIC     empresa,
+# MAGIC     setor,
+# MAGIC     ROUND(close, 2)               AS preco_fechamento,
+# MAGIC     ROUND(variacao_diaria_pct, 4) AS variacao_pct,
+# MAGIC     ROUND(zscore, 4)              AS zscore,
+# MAGIC     tipo_anomalia
+# MAGIC FROM ${schema_gold}.anomalias
+# MAGIC WHERE anomalia = true
+# MAGIC ORDER BY ABS(zscore) DESC
+# MAGIC LIMIT 10;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Qual ação é mais volátil? (% de dias com anomalia)
-SELECT
-    ticker,
-    empresa,
-    setor,
-    COUNT(*)                                              AS total_dias,
-    SUM(CASE WHEN anomalia THEN 1 ELSE 0 END)            AS dias_anomalia,
-    ROUND(SUM(CASE WHEN anomalia THEN 1 ELSE 0 END)
-          * 100.0 / COUNT(*), 2)                         AS pct_anomalias,
-    ROUND(AVG(CASE WHEN anomalia THEN ABS(zscore) END),4) AS zscore_medio_anomalias
-FROM case_santander.gold.anomalias
-GROUP BY ticker, empresa, setor
-ORDER BY pct_anomalias DESC;
+# MAGIC -- Qual ação é mais volátil? (% de dias com anomalia)
+# MAGIC SELECT
+# MAGIC     ticker,
+# MAGIC     empresa,
+# MAGIC     setor,
+# MAGIC     COUNT(*)                                              AS total_dias,
+# MAGIC     SUM(CASE WHEN anomalia THEN 1 ELSE 0 END)            AS dias_anomalia,
+# MAGIC     ROUND(SUM(CASE WHEN anomalia THEN 1 ELSE 0 END)
+# MAGIC           * 100.0 / COUNT(*), 2)                         AS pct_anomalias,
+# MAGIC     ROUND(AVG(CASE WHEN anomalia THEN ABS(zscore) END),4) AS zscore_medio_anomalias
+# MAGIC FROM ${schema_gold}.anomalias
+# MAGIC GROUP BY ticker, empresa, setor
+# MAGIC ORDER BY pct_anomalias DESC;
 
 # COMMAND ----------
 # MAGIC %md
@@ -522,40 +543,40 @@ ORDER BY pct_anomalias DESC;
 # COMMAND ----------
 
 # MAGIC %sql
--- Performance anual por setor: retorno médio vs. volatilidade
-SELECT
-    setor,
-    ano,
-    COUNT(DISTINCT ticker)              AS tickers,
-    ROUND(AVG(variacao_media_pct), 4)  AS retorno_medio_pct,
-    ROUND(AVG(volatilidade), 4)        AS volatilidade_media,
-    ROUND(AVG(volume_medio) / 1e6, 2)  AS volume_medio_M,
-    ROUND(SUM(volume_total) / 1e9, 2)  AS volume_total_B
-FROM case_santander.gold.performance_acoes
-GROUP BY setor, ano
-ORDER BY setor, ano;
+# MAGIC -- Performance anual por setor: retorno médio vs. volatilidade
+# MAGIC SELECT
+# MAGIC     setor,
+# MAGIC     ano,
+# MAGIC     COUNT(DISTINCT ticker)              AS tickers,
+# MAGIC     ROUND(AVG(variacao_media_pct), 4)  AS retorno_medio_pct,
+# MAGIC     ROUND(AVG(volatilidade), 4)        AS volatilidade_media,
+# MAGIC     ROUND(AVG(volume_medio) / 1e6, 2)  AS volume_medio_M,
+# MAGIC     ROUND(SUM(volume_total) / 1e9, 2)  AS volume_total_B
+# MAGIC FROM ${schema_gold}.performance_acoes
+# MAGIC GROUP BY setor, ano
+# MAGIC ORDER BY setor, ano;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Risco x Retorno por ticker (base para análise de portfólio)
-SELECT
-    ticker,
-    empresa,
-    setor,
-    ROUND(AVG(variacao_media_pct), 4)   AS retorno_medio,
-    ROUND(AVG(volatilidade), 4)         AS volatilidade_media,
-    CASE
-        WHEN AVG(variacao_media_pct) > 0 AND AVG(volatilidade) < 1.5
-            THEN 'Ideal (alto retorno, baixo risco)'
-        WHEN AVG(variacao_media_pct) > 0 AND AVG(volatilidade) >= 1.5
-            THEN 'Retorno com risco'
-        WHEN AVG(variacao_media_pct) <= 0
-            THEN 'Risco sem retorno'
-    END AS perfil_ativo
-FROM case_santander.gold.performance_acoes
-GROUP BY ticker, empresa, setor
-ORDER BY retorno_medio DESC;
+# MAGIC -- Risco x Retorno por ticker (base para análise de portfólio)
+# MAGIC SELECT
+# MAGIC     ticker,
+# MAGIC     empresa,
+# MAGIC     setor,
+# MAGIC     ROUND(AVG(variacao_media_pct), 4)   AS retorno_medio,
+# MAGIC     ROUND(AVG(volatilidade), 4)         AS volatilidade_media,
+# MAGIC     CASE
+# MAGIC         WHEN AVG(variacao_media_pct) > 0 AND AVG(volatilidade) < 1.5
+# MAGIC             THEN 'Ideal (alto retorno, baixo risco)'
+# MAGIC         WHEN AVG(variacao_media_pct) > 0 AND AVG(volatilidade) >= 1.5
+# MAGIC             THEN 'Retorno com risco'
+# MAGIC         WHEN AVG(variacao_media_pct) <= 0
+# MAGIC             THEN 'Risco sem retorno'
+# MAGIC     END AS perfil_ativo
+# MAGIC FROM ${schema_gold}.performance_acoes
+# MAGIC GROUP BY ticker, empresa, setor
+# MAGIC ORDER BY retorno_medio DESC;
 
 # COMMAND ----------
 # MAGIC %md
@@ -582,38 +603,38 @@ ORDER BY retorno_medio DESC;
 # COMMAND ----------
 
 # MAGIC %sql
--- Distribuição de clientes por categoria de risco
-SELECT
-    categoria_risco,
-    COUNT(*)                                                   AS clientes,
-    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 1)         AS pct,
-    ROUND(AVG(score_risco), 2)                                 AS score_medio,
-    ROUND(AVG(limite_operacional), 0)                          AS limite_medio,
-    SUM(CASE WHEN requer_revisao = true THEN 1 ELSE 0 END)     AS requer_revisao
-FROM case_santander.gold.score_risco_clientes
-GROUP BY categoria_risco
-ORDER BY score_medio DESC;
+# MAGIC -- Distribuição de clientes por categoria de risco
+# MAGIC SELECT
+# MAGIC     categoria_risco,
+# MAGIC     COUNT(*)                                                   AS clientes,
+# MAGIC     ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 1)         AS pct,
+# MAGIC     ROUND(AVG(score_risco), 2)                                 AS score_medio,
+# MAGIC     ROUND(AVG(limite_operacional), 0)                          AS limite_medio,
+# MAGIC     SUM(CASE WHEN requer_revisao = true THEN 1 ELSE 0 END)     AS requer_revisao
+# MAGIC FROM ${schema_gold}.score_risco_clientes
+# MAGIC GROUP BY categoria_risco
+# MAGIC ORDER BY score_medio DESC;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Clientes de alto risco ativos: candidatos a revisão de compliance
-SELECT
-    s.hash_cliente,
-    s.categoria_risco,
-    ROUND(s.score_risco, 2)         AS score,
-    s.limite_operacional,
-    c.perfil_risco                  AS perfil_declarado,
-    c.score_credito,
-    c.idade,
-    c.faixa_etaria,
-    c.ativo
-FROM case_santander.gold.score_risco_clientes s
-JOIN case_santander.silver.clientes c ON s.hash_cliente = c.hash_cliente
-WHERE s.categoria_risco = 'Alto Risco'
-  AND c.ativo = true
-ORDER BY s.score_risco ASC
-LIMIT 10;
+# MAGIC -- Clientes de alto risco ativos: candidatos a revisão de compliance
+# MAGIC SELECT
+# MAGIC     s.hash_cliente,
+# MAGIC     s.categoria_risco,
+# MAGIC     ROUND(s.score_risco, 2)         AS score,
+# MAGIC     s.limite_operacional,
+# MAGIC     c.perfil_risco                  AS perfil_declarado,
+# MAGIC     c.score_credito,
+# MAGIC     c.idade,
+# MAGIC     c.faixa_etaria,
+# MAGIC     c.ativo
+# MAGIC FROM ${schema_gold}.score_risco_clientes s
+# MAGIC JOIN ${schema_silver}.clientes c ON s.hash_cliente = c.hash_cliente
+# MAGIC WHERE s.categoria_risco = 'Alto Risco'
+# MAGIC   AND c.ativo = true
+# MAGIC ORDER BY s.score_risco ASC
+# MAGIC LIMIT 10;
 
 # COMMAND ----------
 # MAGIC %md
@@ -633,45 +654,45 @@ LIMIT 10;
 # COMMAND ----------
 
 # MAGIC %sql
--- Distribuição de nível de risco de fraude
-SELECT
-    nivel_risco_fraude,
-    COUNT(*)                                              AS ordens,
-    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2)    AS pct,
-    ROUND(AVG(valor_total), 2)                            AS valor_medio,
-    SUM(CASE WHEN requer_revisao = true THEN 1 ELSE 0 END) AS requer_revisao
-FROM case_santander.gold.deteccao_fraude
-GROUP BY nivel_risco_fraude
-ORDER BY
-    CASE nivel_risco_fraude
-        WHEN 'Critico' THEN 1 WHEN 'Alto' THEN 2
-        WHEN 'Medio'   THEN 3 ELSE 4
-    END;
+# MAGIC -- Distribuição de nível de risco de fraude
+# MAGIC SELECT
+# MAGIC     nivel_risco_fraude,
+# MAGIC     COUNT(*)                                              AS ordens,
+# MAGIC     ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2)    AS pct,
+# MAGIC     ROUND(AVG(valor_total), 2)                            AS valor_medio,
+# MAGIC     SUM(CASE WHEN requer_revisao = true THEN 1 ELSE 0 END) AS requer_revisao
+# MAGIC FROM ${schema_gold}.deteccao_fraude
+# MAGIC GROUP BY nivel_risco_fraude
+# MAGIC ORDER BY
+# MAGIC     CASE nivel_risco_fraude
+# MAGIC         WHEN 'Critico' THEN 1 WHEN 'Alto' THEN 2
+# MAGIC         WHEN 'Medio'   THEN 3 ELSE 4
+# MAGIC     END;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Ordens críticas: detalhes para equipe de compliance
-SELECT
-    f.id_ordem,
-    f.hash_cliente,
-    f.ticker,
-    ROUND(f.preco, 2)                AS preco,
-    f.quantidade,
-    ROUND(f.valor_total, 2)          AS valor_total,
-    f.tipo,
-    f.nivel_risco_fraude,
-    f.total_alertas,
-    f.alerta_valor_alto,
-    f.alerta_volume_suspeito,
-    f.alerta_preco_atipico,
-    f.alerta_perfil_incompativel,
-    c.perfil_risco                   AS perfil_cliente
-FROM case_santander.gold.deteccao_fraude f
-JOIN case_santander.silver.clientes c ON f.hash_cliente = c.hash_cliente
-WHERE f.nivel_risco_fraude = 'Critico'
-ORDER BY f.total_alertas DESC, f.valor_total DESC
-LIMIT 15;
+# MAGIC -- Ordens críticas: detalhes para equipe de compliance
+# MAGIC SELECT
+# MAGIC     f.id_ordem,
+# MAGIC     f.hash_cliente,
+# MAGIC     f.ticker,
+# MAGIC     ROUND(f.preco, 2)                AS preco,
+# MAGIC     f.quantidade,
+# MAGIC     ROUND(f.valor_total, 2)          AS valor_total,
+# MAGIC     f.tipo,
+# MAGIC     f.nivel_risco_fraude,
+# MAGIC     f.total_alertas,
+# MAGIC     f.alerta_valor_alto,
+# MAGIC     f.alerta_volume_suspeito,
+# MAGIC     f.alerta_preco_atipico,
+# MAGIC     f.alerta_perfil_incompativel,
+# MAGIC     c.perfil_risco                   AS perfil_cliente
+# MAGIC FROM ${schema_gold}.deteccao_fraude f
+# MAGIC JOIN ${schema_silver}.clientes c ON f.hash_cliente = c.hash_cliente
+# MAGIC WHERE f.nivel_risco_fraude = 'Critico'
+# MAGIC ORDER BY f.total_alertas DESC, f.valor_total DESC
+# MAGIC LIMIT 15;
 
 # COMMAND ----------
 
@@ -681,7 +702,7 @@ BROADCAST JOIN — Aplicado em fraude.py e streaming_gold.py
 
 
   # df_score: ~7.900 linhas × 4 colunas < 1 MB → broadcast
-  df_score = spark.table("case_santander.gold.score_risco_clientes") \\
+  df_score = spark.table("<catalog>.<env>_gold.score_risco_clientes") \\
                   .select("hash_cliente", "score_risco",
                            "categoria_risco", "limite_operacional")
 
@@ -697,13 +718,13 @@ BROADCAST JOIN — Aplicado em fraude.py e streaming_gold.py
 # COMMAND ----------
 
 # MAGIC %sql
--- Confirmar BroadcastHashJoin no plano de execução
-EXPLAIN FORMATTED
-SELECT o.*, s.score_risco, s.categoria_risco, s.limite_operacional
-FROM case_santander.silver.ordens o
-LEFT JOIN case_santander.gold.score_risco_clientes s
-    ON o.hash_cliente = s.hash_cliente;
--- Procurar por "BroadcastHashJoin" no plano de execução físico
+# MAGIC -- Confirmar BroadcastHashJoin no plano de execução
+# MAGIC EXPLAIN FORMATTED
+# MAGIC SELECT o.*, s.score_risco, s.categoria_risco, s.limite_operacional
+# MAGIC FROM ${schema_silver}.ordens o
+# MAGIC LEFT JOIN ${schema_gold}.score_risco_clientes s
+# MAGIC     ON o.hash_cliente = s.hash_cliente;
+# MAGIC -- Procurar por "BroadcastHashJoin" no plano de execução físico
 
 # COMMAND ----------
 # MAGIC %md
@@ -728,69 +749,69 @@ LEFT JOIN case_santander.gold.score_risco_clientes s
 # COMMAND ----------
 
 # MAGIC %sql
--- Fraude Streaming: mesma lógica batch + regra de desvio histórico
-SELECT
-    nivel_risco_fraude,
-    COUNT(*)                              AS transacoes,
-    ROUND(AVG(valor_total), 2)            AS valor_medio,
-    SUM(CASE WHEN alerta_desvio_historico THEN 1 ELSE 0 END) AS com_desvio_historico
-FROM case_santander.gold.fraude_streaming
-GROUP BY nivel_risco_fraude
-ORDER BY
-    CASE nivel_risco_fraude
-        WHEN 'Critico' THEN 1 WHEN 'Alto' THEN 2
-        WHEN 'Medio'   THEN 3 ELSE 4
-    END;
+# MAGIC -- Fraude Streaming: mesma lógica batch + regra de desvio histórico
+# MAGIC SELECT
+# MAGIC     nivel_risco_fraude,
+# MAGIC     COUNT(*)                              AS transacoes,
+# MAGIC     ROUND(AVG(valor_total), 2)            AS valor_medio,
+# MAGIC     SUM(CASE WHEN alerta_desvio_historico THEN 1 ELSE 0 END) AS com_desvio_historico
+# MAGIC FROM ${schema_gold}.fraude_streaming
+# MAGIC GROUP BY nivel_risco_fraude
+# MAGIC ORDER BY
+# MAGIC     CASE nivel_risco_fraude
+# MAGIC         WHEN 'Critico' THEN 1 WHEN 'Alto' THEN 2
+# MAGIC         WHEN 'Medio'   THEN 3 ELSE 4
+# MAGIC     END;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Anomalias intraday: variações extremas por hora do dia
-SELECT
-    ticker,
-    hora,
-    ROUND(preco_medio_hora, 2)     AS preco_medio_hora,
-    ROUND(preco_medio, 2)          AS preco_historico,
-    volume_hora,
-    ROUND(zscore_intraday, 4)      AS zscore,
-    tipo_anomalia_intraday
-FROM case_santander.gold.anomalias_intraday
-WHERE anomalia = true
-ORDER BY ABS(zscore_intraday) DESC
-LIMIT 15;
+# MAGIC -- Anomalias intraday: variações extremas por hora do dia
+# MAGIC SELECT
+# MAGIC     ticker,
+# MAGIC     hora,
+# MAGIC     ROUND(preco_medio_hora, 2)     AS preco_medio_hora,
+# MAGIC     ROUND(preco_medio, 2)          AS preco_historico,
+# MAGIC     volume_hora,
+# MAGIC     ROUND(zscore_intraday, 4)      AS zscore,
+# MAGIC     tipo_anomalia_intraday
+# MAGIC FROM ${schema_gold}.anomalias_intraday
+# MAGIC WHERE anomalia = true
+# MAGIC ORDER BY ABS(zscore_intraday) DESC
+# MAGIC LIMIT 15;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Volume Intraday: pressão compradora vs. vendedora por hora
-SELECT
-    ticker,
-    hora,
-    total_transacoes,
-    ROUND(volume_compras / (volume_compras + volume_vendas + 0.001) * 100, 1) AS pct_compras,
-    ROUND(volume_vendas  / (volume_compras + volume_vendas + 0.001) * 100, 1) AS pct_vendas,
-    pressao_mercado,           -- "Compra" / "Venda" / "Neutro"
-    alerta_volume,             -- "Normal" / "Alto" / "Critico"
-    ROUND(pct_volume_diario, 2) AS pct_volume_diario
-FROM case_santander.gold.volume_intraday
-ORDER BY hora, ticker
-LIMIT 18;
+# MAGIC -- Volume Intraday: pressão compradora vs. vendedora por hora
+# MAGIC SELECT
+# MAGIC     ticker,
+# MAGIC     hora,
+# MAGIC     total_transacoes,
+# MAGIC     ROUND(volume_compras / (volume_compras + volume_vendas + 0.001) * 100, 1) AS pct_compras,
+# MAGIC     ROUND(volume_vendas  / (volume_compras + volume_vendas + 0.001) * 100, 1) AS pct_vendas,
+# MAGIC     pressao_mercado,           -- "Compra" / "Venda" / "Neutro"
+# MAGIC     alerta_volume,             -- "Normal" / "Alto" / "Critico"
+# MAGIC     ROUND(pct_volume_diario, 2) AS pct_volume_diario
+# MAGIC FROM ${schema_gold}.volume_intraday
+# MAGIC ORDER BY hora, ticker
+# MAGIC LIMIT 18;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Ranking de ações em tempo real por volume financeiro
-SELECT
-    rank_volume                            AS posicao,
-    ticker,
-    total_transacoes,
-    ROUND(volume_total / 1e6, 2)           AS volume_M,
-    ROUND(valor_total / 1e6, 2)            AS valor_financeiro_M,
-    ROUND(preco_medio_atual, 2)            AS preco_atual,
-    ROUND(variacao_vs_historico_pct, 4)   AS variacao_vs_historico_pct,
-    tendencia                              -- "Alta" / "Estavel" / "Queda"
-FROM case_santander.gold.ranking_acoes_realtime
-ORDER BY rank_volume;
+# MAGIC -- Ranking de ações em tempo real por volume financeiro
+# MAGIC SELECT
+# MAGIC     rank_volume                            AS posicao,
+# MAGIC     ticker,
+# MAGIC     total_transacoes,
+# MAGIC     ROUND(volume_total / 1e6, 2)           AS volume_M,
+# MAGIC     ROUND(valor_total / 1e6, 2)            AS valor_financeiro_M,
+# MAGIC     ROUND(preco_medio_atual, 2)            AS preco_atual,
+# MAGIC     ROUND(variacao_vs_historico_pct, 4)   AS variacao_vs_historico_pct,
+# MAGIC     tendencia                              -- "Alta" / "Estavel" / "Queda"
+# MAGIC FROM ${schema_gold}.ranking_acoes_realtime
+# MAGIC ORDER BY rank_volume;
 
 # COMMAND ----------
 # MAGIC %md
@@ -820,72 +841,72 @@ ORDER BY rank_volume;
 # COMMAND ----------
 
 # MAGIC %sql
--- Clientes que mudaram de perfil (têm mais de 1 registro no SCD)
-SELECT
-    hash_cliente,
-    COUNT(*)                                   AS versoes,
-    MIN(perfil_risco)                          AS perfil_inicial,
-    MAX(CASE WHEN atual THEN perfil_risco END) AS perfil_atual,
-    MIN(data_inicio)                           AS desde,
-    MAX(data_inicio)                           AS ultima_mudanca
-FROM case_santander.silver.clientes_scd
-GROUP BY hash_cliente
-HAVING COUNT(*) > 1
-ORDER BY versoes DESC
-LIMIT 15;
+# MAGIC -- Clientes que mudaram de perfil (têm mais de 1 registro no SCD)
+# MAGIC SELECT
+# MAGIC     hash_cliente,
+# MAGIC     COUNT(*)                                   AS versoes,
+# MAGIC     MIN(perfil_risco)                          AS perfil_inicial,
+# MAGIC     MAX(CASE WHEN atual THEN perfil_risco END) AS perfil_atual,
+# MAGIC     MIN(data_inicio)                           AS desde,
+# MAGIC     MAX(data_inicio)                           AS ultima_mudanca
+# MAGIC FROM ${schema_silver}.clientes_scd
+# MAGIC GROUP BY hash_cliente
+# MAGIC HAVING COUNT(*) > 1
+# MAGIC ORDER BY versoes DESC
+# MAGIC LIMIT 15;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Histórico completo de um cliente específico (substituir hash conforme necessário)
-SELECT
-    hash_cliente,
-    perfil_risco,
-    score_credito,
-    data_inicio,
-    data_fim,
-    atual,
-    DATEDIFF(COALESCE(data_fim, CURRENT_DATE()), data_inicio) AS dias_neste_perfil
-FROM case_santander.silver.clientes_scd
-WHERE hash_cliente = (
-    SELECT hash_cliente
-    FROM case_santander.silver.clientes_scd
-    GROUP BY hash_cliente
-    HAVING COUNT(*) > 1
-    LIMIT 1
-)
-ORDER BY data_inicio;
+# MAGIC -- Histórico completo de um cliente específico (substituir hash conforme necessário)
+# MAGIC SELECT
+# MAGIC     hash_cliente,
+# MAGIC     perfil_risco,
+# MAGIC     score_credito,
+# MAGIC     data_inicio,
+# MAGIC     data_fim,
+# MAGIC     atual,
+# MAGIC     DATEDIFF(COALESCE(data_fim, CURRENT_DATE()), data_inicio) AS dias_neste_perfil
+# MAGIC FROM ${schema_silver}.clientes_scd
+# MAGIC WHERE hash_cliente = (
+# MAGIC     SELECT hash_cliente
+# MAGIC     FROM ${schema_silver}.clientes_scd
+# MAGIC     GROUP BY hash_cliente
+# MAGIC     HAVING COUNT(*) > 1
+# MAGIC     LIMIT 1
+# MAGIC )
+# MAGIC ORDER BY data_inicio;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Evolução do score de risco Gold via SCD
-SELECT
-    hash_cliente,
-    ROUND(score_risco, 2)   AS score_risco,
-    categoria_risco,
-    limite_operacional,
-    data_inicio,
-    data_fim,
-    atual
-FROM case_santander.gold.score_risco_scd
-ORDER BY hash_cliente, data_inicio
-LIMIT 20;
+# MAGIC -- Evolução do score de risco Gold via SCD
+# MAGIC SELECT
+# MAGIC     hash_cliente,
+# MAGIC     ROUND(score_risco, 2)   AS score_risco,
+# MAGIC     categoria_risco,
+# MAGIC     limite_operacional,
+# MAGIC     data_inicio,
+# MAGIC     data_fim,
+# MAGIC     atual
+# MAGIC FROM ${schema_gold}.score_risco_scd
+# MAGIC ORDER BY hash_cliente, data_inicio
+# MAGIC LIMIT 20;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Estatística: quantos clientes já mudaram de categoria de risco?
-SELECT
-    COUNT(DISTINCT CASE WHEN versoes > 1 THEN hash_cliente END) AS clientes_mudaram,
-    COUNT(DISTINCT hash_cliente)                                 AS total_clientes,
-    ROUND(COUNT(DISTINCT CASE WHEN versoes > 1 THEN hash_cliente END) * 100.0
-          / COUNT(DISTINCT hash_cliente), 2)                     AS pct_com_mudanca
-FROM (
-    SELECT hash_cliente, COUNT(*) AS versoes
-    FROM case_santander.gold.score_risco_scd
-    GROUP BY hash_cliente
-);
+# MAGIC -- Estatística: quantos clientes já mudaram de categoria de risco?
+# MAGIC SELECT
+# MAGIC     COUNT(DISTINCT CASE WHEN versoes > 1 THEN hash_cliente END) AS clientes_mudaram,
+# MAGIC     COUNT(DISTINCT hash_cliente)                                 AS total_clientes,
+# MAGIC     ROUND(COUNT(DISTINCT CASE WHEN versoes > 1 THEN hash_cliente END) * 100.0
+# MAGIC           / COUNT(DISTINCT hash_cliente), 2)                     AS pct_com_mudanca
+# MAGIC FROM (
+# MAGIC     SELECT hash_cliente, COUNT(*) AS versoes
+# MAGIC     FROM ${schema_gold}.score_risco_scd
+# MAGIC     GROUP BY hash_cliente
+# MAGIC );
 
 # COMMAND ----------
 # MAGIC %md
@@ -895,68 +916,68 @@ FROM (
 # COMMAND ----------
 
 # MAGIC %sql
--- Visão consolidada de qualidade — última execução
-SELECT
-    tabela,
-    total_registros,
-    ROUND(qualidade_pct, 2)                 AS qualidade_pct,
-    total_nulos,
-    total_duplicatas,
-    CASE
-        WHEN qualidade_pct < 95  THEN ' CRÍTICO'
-        WHEN qualidade_pct < 99  THEN '🟡 ATENÇÃO'
-        WHEN total_duplicatas > 0 THEN '🟡 ATENÇÃO'
-        ELSE                          '🟢 OK'
-    END AS status,
-    timestamp_verificacao
-FROM case_santander.gold.observabilidade
-WHERE timestamp_verificacao = (
-    SELECT MAX(timestamp_verificacao)
-    FROM case_santander.gold.observabilidade
-)
-ORDER BY qualidade_pct ASC;
+# MAGIC -- Visão consolidada de qualidade — última execução
+# MAGIC SELECT
+# MAGIC     tabela,
+# MAGIC     total_registros,
+# MAGIC     ROUND(qualidade_pct, 2)                 AS qualidade_pct,
+# MAGIC     total_nulos,
+# MAGIC     total_duplicatas,
+# MAGIC     CASE
+# MAGIC         WHEN qualidade_pct < 95  THEN ' CRÍTICO'
+# MAGIC         WHEN qualidade_pct < 99  THEN '🟡 ATENÇÃO'
+# MAGIC         WHEN total_duplicatas > 0 THEN '🟡 ATENÇÃO'
+# MAGIC         ELSE                          '🟢 OK'
+# MAGIC     END AS status,
+# MAGIC     timestamp_verificacao
+# MAGIC FROM ${schema_gold}.observabilidade
+# MAGIC WHERE timestamp_verificacao = (
+# MAGIC     SELECT MAX(timestamp_verificacao)
+# MAGIC     FROM ${schema_gold}.observabilidade
+# MAGIC )
+# MAGIC ORDER BY qualidade_pct ASC;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Histórico de qualidade ao longo do tempo
-SELECT
-    DATE(timestamp_verificacao) AS data,
-    tabela,
-    ROUND(qualidade_pct, 2)     AS qualidade_pct,
-    total_registros
-FROM case_santander.gold.observabilidade
-WHERE tabela IN ('case_santander.silver.acoes', 'case_santander.gold.deteccao_fraude')
-ORDER BY tabela, data DESC
-LIMIT 20;
+# MAGIC -- Histórico de qualidade ao longo do tempo
+# MAGIC SELECT
+# MAGIC     DATE(timestamp_verificacao) AS data,
+# MAGIC     tabela,
+# MAGIC     ROUND(qualidade_pct, 2)     AS qualidade_pct,
+# MAGIC     total_registros
+# MAGIC FROM ${schema_gold}.observabilidade
+# MAGIC WHERE tabela IN ('${schema_silver}.acoes', '${schema_gold}.deteccao_fraude')
+# MAGIC ORDER BY tabela, data DESC
+# MAGIC LIMIT 20;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- OPTIMIZE + ZORDER: compactar small files e reordenar para data skipping
--- (executado diariamente pelo job_observabilidade.py)
-OPTIMIZE case_santander.gold.anomalias ZORDER BY (ticker, data_processamento);
--- Depois do OPTIMIZE: "numFiles" reduz, "sizeInBytes" por arquivo aumenta
+# MAGIC -- OPTIMIZE + ZORDER: compactar small files e reordenar para data skipping
+# MAGIC -- (executado diariamente pelo job_observabilidade.py)
+# MAGIC OPTIMIZE ${schema_gold}.anomalias ZORDER BY (ticker, data_processamento);
+# MAGIC -- Depois do OPTIMIZE: "numFiles" reduz, "sizeInBytes" por arquivo aumenta
 
 # COMMAND ----------
 
 # MAGIC %sql
--- VACUUM DRY RUN: ver o que seria removido (sem deletar de fato)
-VACUUM case_santander.silver.streaming RETAIN 168 HOURS DRY RUN;
+# MAGIC -- VACUUM DRY RUN: ver o que seria removido (sem deletar de fato)
+# MAGIC VACUUM ${schema_silver}.streaming RETAIN 168 HOURS DRY RUN;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Time Travel: consultar dados como estavam ontem (debugging, auditoria)
-SELECT COUNT(*) AS registros_versao_0
-FROM case_santander.gold.deteccao_fraude VERSION AS OF 0;
--- Ou por timestamp: TIMESTAMP AS OF '2025-04-10 06:00:00'
+# MAGIC -- Time Travel: consultar dados como estavam ontem (debugging, auditoria)
+# MAGIC SELECT COUNT(*) AS registros_versao_0
+# MAGIC FROM ${schema_gold}.deteccao_fraude VERSION AS OF 0;
+# MAGIC -- Ou por timestamp: TIMESTAMP AS OF '2025-04-10 06:00:00'
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Histórico de versões Delta (time travel disponível)
-DESCRIBE HISTORY case_santander.silver.acoes LIMIT 5;
+# MAGIC -- Histórico de versões Delta (time travel disponível)
+# MAGIC DESCRIBE HISTORY ${schema_silver}.acoes LIMIT 5;
 
 # COMMAND ----------
 # MAGIC %md
@@ -1126,45 +1147,45 @@ SEGURANÇA — Padrão adotado em src/config/settings.py
 # COMMAND ----------
 
 # MAGIC %sql
--- Estrutura completa do catálogo
-SELECT
-    table_catalog AS catalogo,
-    table_schema  AS camada,
-    table_name    AS tabela,
-    table_type
-FROM information_schema.tables
-WHERE table_catalog = 'case_santander'
-ORDER BY
-    CASE table_schema WHEN 'bronze' THEN 1 WHEN 'silver' THEN 2 WHEN 'gold' THEN 3 END,
-    table_name;
+# MAGIC -- Estrutura completa do catálogo
+# MAGIC SELECT
+# MAGIC     table_catalog AS catalogo,
+# MAGIC     table_schema  AS camada,
+# MAGIC     table_name    AS tabela,
+# MAGIC     table_type
+# MAGIC FROM information_schema.tables
+# MAGIC WHERE table_catalog = 'case_santander'
+# MAGIC ORDER BY
+# MAGIC     CASE table_schema WHEN 'bronze' THEN 1 WHEN 'silver' THEN 2 WHEN 'gold' THEN 3 END,
+# MAGIC     table_name;
 
 # COMMAND ----------
 
 # MAGIC %sql
--- Contagem total de registros por camada (panorama do pipeline)
-SELECT camada, SUM(registros) AS total_registros FROM (
-    SELECT 'bronze' AS camada, COUNT(*) AS registros FROM case_santander.bronze.acoes     UNION ALL
-    SELECT 'bronze',           COUNT(*) FROM case_santander.bronze.bcb                     UNION ALL
-    SELECT 'bronze',           COUNT(*) FROM case_santander.bronze.world_bank               UNION ALL
-    SELECT 'bronze',           COUNT(*) FROM case_santander.bronze.clientes                 UNION ALL
-    SELECT 'bronze',           COUNT(*) FROM case_santander.bronze.ordens                   UNION ALL
-    SELECT 'bronze',           COUNT(*) FROM case_santander.bronze.kafka                    UNION ALL
-    SELECT 'silver',           COUNT(*) FROM case_santander.silver.acoes                    UNION ALL
-    SELECT 'silver',           COUNT(*) FROM case_santander.silver.bcb                      UNION ALL
-    SELECT 'silver',           COUNT(*) FROM case_santander.silver.clientes                 UNION ALL
-    SELECT 'silver',           COUNT(*) FROM case_santander.silver.ordens                   UNION ALL
-    SELECT 'silver',           COUNT(*) FROM case_santander.silver.streaming                UNION ALL
-    SELECT 'gold',             COUNT(*) FROM case_santander.gold.anomalias                  UNION ALL
-    SELECT 'gold',             COUNT(*) FROM case_santander.gold.performance_acoes          UNION ALL
-    SELECT 'gold',             COUNT(*) FROM case_santander.gold.score_risco_clientes       UNION ALL
-    SELECT 'gold',             COUNT(*) FROM case_santander.gold.deteccao_fraude            UNION ALL
-    SELECT 'gold',             COUNT(*) FROM case_santander.gold.fraude_streaming           UNION ALL
-    SELECT 'gold',             COUNT(*) FROM case_santander.gold.anomalias_intraday         UNION ALL
-    SELECT 'gold',             COUNT(*) FROM case_santander.gold.volume_intraday            UNION ALL
-    SELECT 'gold',             COUNT(*) FROM case_santander.gold.ranking_acoes_realtime
-)
-GROUP BY camada
-ORDER BY CASE camada WHEN 'bronze' THEN 1 WHEN 'silver' THEN 2 ELSE 3 END;
+# MAGIC -- Contagem total de registros por camada (panorama do pipeline)
+# MAGIC SELECT camada, SUM(registros) AS total_registros FROM (
+# MAGIC     SELECT 'bronze' AS camada, COUNT(*) AS registros FROM ${schema_bronze}.acoes     UNION ALL
+# MAGIC     SELECT 'bronze',           COUNT(*) FROM ${schema_bronze}.bcb                     UNION ALL
+# MAGIC     SELECT 'bronze',           COUNT(*) FROM ${schema_bronze}.world_bank               UNION ALL
+# MAGIC     SELECT 'bronze',           COUNT(*) FROM ${schema_bronze}.clientes                 UNION ALL
+# MAGIC     SELECT 'bronze',           COUNT(*) FROM ${schema_bronze}.ordens                   UNION ALL
+# MAGIC     SELECT 'bronze',           COUNT(*) FROM ${schema_bronze}.kafka                    UNION ALL
+# MAGIC     SELECT 'silver',           COUNT(*) FROM ${schema_silver}.acoes                    UNION ALL
+# MAGIC     SELECT 'silver',           COUNT(*) FROM ${schema_silver}.bcb                      UNION ALL
+# MAGIC     SELECT 'silver',           COUNT(*) FROM ${schema_silver}.clientes                 UNION ALL
+# MAGIC     SELECT 'silver',           COUNT(*) FROM ${schema_silver}.ordens                   UNION ALL
+# MAGIC     SELECT 'silver',           COUNT(*) FROM ${schema_silver}.streaming                UNION ALL
+# MAGIC     SELECT 'gold',             COUNT(*) FROM ${schema_gold}.anomalias                  UNION ALL
+# MAGIC     SELECT 'gold',             COUNT(*) FROM ${schema_gold}.performance_acoes          UNION ALL
+# MAGIC     SELECT 'gold',             COUNT(*) FROM ${schema_gold}.score_risco_clientes       UNION ALL
+# MAGIC     SELECT 'gold',             COUNT(*) FROM ${schema_gold}.deteccao_fraude            UNION ALL
+# MAGIC     SELECT 'gold',             COUNT(*) FROM ${schema_gold}.fraude_streaming           UNION ALL
+# MAGIC     SELECT 'gold',             COUNT(*) FROM ${schema_gold}.anomalias_intraday         UNION ALL
+# MAGIC     SELECT 'gold',             COUNT(*) FROM ${schema_gold}.volume_intraday            UNION ALL
+# MAGIC     SELECT 'gold',             COUNT(*) FROM ${schema_gold}.ranking_acoes_realtime
+# MAGIC )
+# MAGIC GROUP BY camada
+# MAGIC ORDER BY CASE camada WHEN 'bronze' THEN 1 WHEN 'silver' THEN 2 ELSE 3 END;
 
 # COMMAND ----------
 # MAGIC %md

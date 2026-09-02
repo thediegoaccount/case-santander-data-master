@@ -3,8 +3,8 @@ Job: Streaming to Gold
 Transforma dados da camada silver.streaming em tabelas Gold analíticas.
 
 Depende de:
-  - case_santander.silver.streaming  (gerado por t5_streaming)
-  - case_santander.gold.performance_acoes (gerado por t3_gold)
+  - <catalog>.<env>_silver.streaming  (gerado por t5_streaming)
+  - <catalog>.<env>_gold.performance_acoes (gerado por t3_gold)
 
 Tabelas geradas:
   - gold.fraude_streaming       : deteccao de transacoes suspeitas em tempo real
@@ -35,6 +35,7 @@ from src.gold.streaming_gold import (
     detectar_anomalias_intraday,
     detectar_fraude_streaming,
 )
+from src.config.tables import SCHEMA_GOLD, SCHEMA_SILVER
 
 
 def main():
@@ -56,9 +57,9 @@ def main():
     # updates/deletes que não se aplicam ao fluxo de streaming.
     try:
         # fmt: off
-        ultima_versao = spark.sql("""
+        ultima_versao = spark.sql(f"""
             SELECT COALESCE(MAX(versao_cdf), 0)
-            FROM case_santander.gold.observabilidade
+            FROM {SCHEMA_GOLD}.observabilidade
             WHERE tabela = 'streaming'
         """).collect()[0][0]
         # fmt: on
@@ -68,7 +69,7 @@ def main():
             .format("delta") \
             .option("readChangeFeed", "true") \
             .option("startingVersion", ultima_versao) \
-            .table("case_santander.silver.streaming") \
+            .table(f"{SCHEMA_SILVER}.streaming") \
             .filter("_change_type = 'insert'") \
             .drop("_change_type", "_commit_version", "_commit_timestamp")
         # fmt: on
@@ -79,7 +80,7 @@ def main():
     except Exception:
         # Fallback: leitura completa se CDF ainda nao estiver habilitado
         df_cdf = None
-        _row = spark.sql("SELECT COUNT(*) as total FROM case_santander.silver.streaming").collect()[0]
+        _row = spark.sql(f"SELECT COUNT(*) as total FROM {SCHEMA_SILVER}.streaming").collect()[0]
         total_streaming = _row["total"]
         info("job_streaming_to_gold", f"CDC indisponivel — leitura completa: {total_streaming} transacoes")
 
@@ -107,5 +108,5 @@ def main():
     info("job_streaming_to_gold", "\n=== JOB STREAMING TO GOLD CONCLUIDO ===")
     info("job_streaming_to_gold", f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
-
-main()
+if __name__ == "__main__":
+    main()

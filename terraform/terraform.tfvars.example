@@ -1,0 +1,38 @@
+# Copie para terraform.tfvars e preencha.
+# terraform.tfvars contem secrets -- NAO versione.
+
+environment = "hk"
+location    = "eastus2"
+
+# --- Databricks ---
+# account_id: portal de accounts (accounts.azuredatabricks.net) > canto
+# superior direito. Obrigatorio: metastore e recurso account-level.
+databricks_account_id = "00000000-0000-0000-0000-000000000000"
+
+# Preenchido na ETAPA 2 com o output databricks_workspace_host da etapa 1.
+# Precisa do https://.
+databricks_host = "https://adb-0000000000000000.0.azuredatabricks.net"
+
+# Se ja existe um metastore Unity Catalog nesta regiao (Azure permite so um
+# por regiao/account), informe o ID e nenhum novo sera criado.
+# existing_metastore_id = "00000000-0000-0000-0000-000000000000"
+
+# Se o apply roda como service principal, deixe false: scope Key Vault-backed
+# so pode ser criado com credencial de usuario AAD. Ver scripts/deploy_infra.sh.
+# create_secret_scope = false
+
+# --- Service principal usado pelos jobs para acessar o ADLS ---
+client_id     = "00000000-0000-0000-0000-000000000000"
+client_secret = "..."
+
+# tenant_id e object_id sao opcionais: por padrao vem da identidade que roda
+# o Terraform (az login / ARM_* env vars). Preencha so para sobrescrever.
+# tenant_id = "00000000-0000-0000-0000-000000000000"
+# object_id = "00000000-0000-0000-0000-000000000000"
+
+# --- Credenciais de fonte de dados ---
+kaggle_username = "..."
+kaggle_key      = "..."
+
+# Salt do hashing SHA256 de anonimizacao. Trocar invalida os hashes ja gravados.
+salt = "..."

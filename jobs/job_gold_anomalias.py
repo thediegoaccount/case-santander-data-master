@@ -3,10 +3,10 @@ Job: Gold Anomalias
 Detecta anomalias em movimentação de ações via análise estatística.
 
 Depende de:
-  - case_santander.silver.acoes
+  - <catalog>.<env>_silver.acoes
 
 Produz:
-  - case_santander.gold.anomalias
+  - <catalog>.<env>_gold.anomalias
 
 Ou via Databricks Workflow:
     Task: t3_anomalias
@@ -26,6 +26,7 @@ from src.config.secrets import get_secret
 
 from src.config.settings import configure_adls
 from src.gold.anomalias import detectar_anomalias
+from src.config.tables import SCHEMA_GOLD, SCHEMA_SILVER
 
 
 def main():
@@ -47,5 +48,5 @@ def main():
     info("job_gold_anomalias", "\n=== JOB GOLD ANOMALIAS CONCLUIDO ===")
     info("job_gold_anomalias", f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
-
-main()
+if __name__ == "__main__":
+    main()

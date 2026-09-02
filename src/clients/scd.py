@@ -6,6 +6,7 @@ from datetime import datetime
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+from src.config.tables import SCHEMA_GOLD, SCHEMA_SILVER
 
 
 def aplicar_scd_type2(spark: SparkSession, df_novos, tabela_uc: str, chave: str) -> None:
@@ -70,19 +71,19 @@ def aplicar_scd_clientes(spark: SparkSession, storage_account: str = None) -> in
     """
     print("Aplicando SCD Type 2 em clientes...")
 
-    df_clientes = spark.sql("""
+    df_clientes = spark.sql(f"""
         SELECT
             id_cliente, hash_cliente, sobrenome_masked,
             perfil_risco, score_credito, faixa_saldo,
             faixa_etaria, score_categoria, ativo, churn
-        FROM case_santander.silver.clientes
+        FROM {SCHEMA_SILVER}.clientes
     """)
 
-    aplicar_scd_type2(spark, df_clientes, "case_santander.silver.clientes_scd", "hash_cliente")
+    aplicar_scd_type2(spark, df_clientes, f"{SCHEMA_SILVER}.clientes_scd", "hash_cliente")
 
-    total = spark.sql("""
+    total = spark.sql(f"""
         SELECT COUNT(*) as total
-        FROM case_santander.silver.clientes_scd
+        FROM {SCHEMA_SILVER}.clientes_scd
         WHERE atual = true
     """).collect()[0]["total"]
 
@@ -96,19 +97,19 @@ def aplicar_scd_score_risco(spark: SparkSession, storage_account: str = None) ->
     """
     print("Aplicando SCD Type 2 em score de risco...")
 
-    df_score = spark.sql("""
+    df_score = spark.sql(f"""
         SELECT
             hash_cliente, perfil_risco, faixa_saldo,
             score_credito, score_risco, categoria_risco,
             limite_operacional, num_ativos, total_ordens
-        FROM case_santander.gold.score_risco_clientes
+        FROM {SCHEMA_GOLD}.score_risco_clientes
     """)
 
-    aplicar_scd_type2(spark, df_score, "case_santander.gold.score_risco_scd", "hash_cliente")
+    aplicar_scd_type2(spark, df_score, f"{SCHEMA_GOLD}.score_risco_scd", "hash_cliente")
 
-    total = spark.sql("""
+    total = spark.sql(f"""
         SELECT COUNT(*) as total
-        FROM case_santander.gold.score_risco_scd
+        FROM {SCHEMA_GOLD}.score_risco_scd
         WHERE atual = true
     """).collect()[0]["total"]
 

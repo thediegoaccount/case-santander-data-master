@@ -29,9 +29,21 @@ variable "tags" {
 }
 
 variable "databricks_host" {
-  description = "Databricks workspace host URL"
+  description = "Host do workspace Databricks, com https:// (output databricks_workspace_host da etapa 1)"
   type        = string
   sensitive   = true
+}
+
+variable "databricks_account_id" {
+  description = "Account ID do Databricks (console de accounts), para recursos account-level"
+  type        = string
+  sensitive   = true
+}
+
+variable "existing_metastore_id" {
+  description = "Metastore Unity Catalog ja existente na regiao. Azure permite so um por regiao/account; se ja houver, informe o ID aqui."
+  type        = string
+  default     = null
 }
 
 variable "databricks_sku" {
@@ -40,20 +52,20 @@ variable "databricks_sku" {
   default     = "premium"
 }
 
-variable "databricks_managed_rg" {
-  description = "Managed resource group for Databricks"
+variable "databricks_managed_rg_name" {
+  description = "Nome do managed resource group criado pelo Databricks"
   type        = string
   default     = "rg-databricks-managed"
 }
 
-variable "event_hub_namespace" {
-  description = "Event Hub namespace name"
+variable "event_hub_namespace_prefix" {
+  description = "Prefixo do Event Hub namespace (o ambiente e sufixado). Namespace e DNS global."
   type        = string
   default     = "evhcasesantander"
 }
 
-variable "event_hub_name" {
-  description = "Event Hub name"
+variable "event_hub_prefix" {
+  description = "Prefixo do Event Hub (o ambiente e sufixado)"
   type        = string
   default     = "transacoes-financeiras"
 }
@@ -62,6 +74,13 @@ variable "unity_catalog_name" {
   description = "Unity Catalog name"
   type        = string
   default     = "case_santander"
+}
+
+variable "object_id" {
+  description = "Object ID do principal que administra o Key Vault. Se null, usa a identidade que roda o Terraform."
+  type        = string
+  default     = null
+  sensitive   = true
 }
 
 variable "client_id" {
@@ -77,9 +96,16 @@ variable "client_secret" {
 }
 
 variable "tenant_id" {
-  description = "Azure AD Tenant ID"
+  description = "Azure AD Tenant ID. Se null, usa o tenant da identidade que roda o Terraform."
   type        = string
+  default     = null
   sensitive   = true
+}
+
+variable "create_secret_scope" {
+  description = "Cria o secret scope Key Vault-backed. Exige credencial de USUARIO AAD; deixe false se o apply roda como service principal e crie o scope manualmente."
+  type        = bool
+  default     = true
 }
 
 variable "kaggle_username" {

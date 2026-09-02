@@ -21,6 +21,8 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType
 
 from src.config.settings import configure_adls
+from src.config.tables import register_external_table
+from src.config.tables import SCHEMA_SILVER
 
 
 def main():
@@ -65,11 +67,17 @@ def main():
     # fmt: off
     df_stream = spark.readStream \
         .format("cloudFiles") \
-        .option("cloudFiles.format", "parquet") \
+        .option("cloudFiles.format", "avro") \
         .option("cloudFiles.schemaLocation", checkpoint_path + "/schema") \
         .option("cloudFiles.maxFilesPerTrigger", 1) \
-        .schema(schema_transacao) \
         .load(bronze_kafka_path)
+
+    # Event Hub Capture grava Avro com envelope
+    # {SequenceNumber, Offset, EnqueuedTimeUtc, SystemProperties, Properties,
+    # Body}. O payload JSON original vem em Body, como bytes.
+    df_stream = df_stream.select(
+        F.from_json(F.col("Body").cast("string"), schema_transacao).alias("t")
+    ).select("t.*")
 
     df_processado = df_stream \
         .withColumn("timestamp",   F.to_timestamp("timestamp")) \
@@ -86,9 +94,11 @@ def main():
             .otherwise("Normal")) \
         .withColumn("processado_em", F.lit(datetime.now().isoformat()))
 
-    # Limpar destino e recriar
-    dbutils.fs.rm(silver_streaming_path, recurse=True)
-
+    # NAO limpar o destino: job_streaming_continuous escreve no MESMO
+    # silver/streaming/ com um checkpoint proprio. O `dbutils.fs.rm` que
+    # existia aqui apagava o diretorio Delta sob o stream continuo, que
+    # abortava com FileNotFoundException e ficava com o checkpoint apontando
+    # para uma tabela inexistente -- estado irrecuperavel sem reset.
     query = df_processado.writeStream \
         .format("delta") \
         .outputMode("append") \
@@ -100,17 +110,13 @@ def main():
     query.awaitTermination()
     info("job_streaming", " Streaming processado!")
 
-    # Registrar no Unity Catalog
-    spark.sql("DROP TABLE IF EXISTS case_santander.silver.streaming")
-    df_resultado = spark.read.format("delta").load(silver_streaming_path)
-    df_resultado.write \
-        .format("delta") \
-        .mode("overwrite") \
-        .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.silver.streaming")
+    # Registra a tabela sem DROP: o DROP anterior apagava a propriedade
+    # delta.enableChangeDataFeed a cada execucao, matando o CDF que
+    # job_unity_catalog tinha acabado de habilitar.
+    register_external_table(spark, "silver", "streaming", silver_streaming_path)
     # fmt: on
 
-    info("job_streaming", " case_santander.silver.streaming gravado")
+    info("job_streaming", f" {SCHEMA_SILVER}.streaming gravado")
 
     fim = datetime.now()
     info("job_streaming", "\n=== JOB STREAMING CONCLUIDO ===")

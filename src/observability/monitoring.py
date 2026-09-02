@@ -7,6 +7,7 @@ from datetime import datetime
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+from src.config.tables import SCHEMA_GOLD, SCHEMA_SILVER
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s — %(levelname)s — %(message)s")
 logger = logging.getLogger("case-santander")
@@ -19,7 +20,9 @@ def monitorar_tabela(spark: SparkSession, tabela_uc: str) -> dict:
     """
     inicio = datetime.now()
     partes = tabela_uc.split(".")
-    camada = partes[1]
+    # partes[1] e "hk_silver"/"prod_silver"; o rotulo da camada e so a
+    # segunda metade, para as metricas nao mudarem de nome entre ambientes.
+    camada = partes[1].split("_", 1)[-1]
     nome = partes[2]
 
     try:
@@ -34,6 +37,16 @@ def monitorar_tabela(spark: SparkSession, tabela_uc: str) -> dict:
             df.select([F.sum(F.col(c).isNull().cast("int")).alias(c) for c in df.columns]).first().asDict().values()
         )
 
+        # Versao Delta da tabela. Os jobs de streaming leem
+        # `SELECT MAX(versao_cdf) FROM ...observabilidade WHERE tabela=...`
+        # como marca d'agua do CDC, mas esta coluna nunca era gravada:
+        # UNRESOLVED_COLUMN era engolido por `except` e cada execucao (a cada
+        # 5 min) caia em full scan. O CDC anunciado nunca funcionou.
+        try:
+            versao_cdf = spark.sql(f"DESCRIBE HISTORY {tabela_uc} LIMIT 1").first()["version"]
+        except Exception:
+            versao_cdf = 0
+
         duplicatas = total - df.dropDuplicates().count()
         qualidade = round((1 - nulos / (total * len(df.columns))) * 100, 2)
 
@@ -45,6 +58,7 @@ def monitorar_tabela(spark: SparkSession, tabela_uc: str) -> dict:
             "total_registros":  total,
             "total_nulos":      nulos,
             "total_duplicatas": duplicatas,
+            "versao_cdf":       versao_cdf,
             "qualidade_pct":    qualidade,
             "tempo_seg":        round((datetime.now() - inicio).total_seconds(), 2)
         }
@@ -74,20 +88,20 @@ def executar_monitoramento(spark: SparkSession, storage_account: str = None) -> 
     Returns: lista de metricas por tabela
     """
     tabelas = [
-        "case_santander.silver.acoes",
-        "case_santander.silver.bcb",
-        "case_santander.silver.world_bank",
-        "case_santander.silver.clientes",
-        "case_santander.silver.ordens",
-        "case_santander.silver.streaming",
-        "case_santander.gold.anomalias",
-        "case_santander.gold.posicao_clientes",
-        "case_santander.gold.score_risco_clientes",
-        "case_santander.gold.deteccao_fraude",
-        "case_santander.gold.fraude_streaming",
-        "case_santander.gold.anomalias_intraday",
-        "case_santander.gold.volume_intraday",
-        "case_santander.gold.ranking_acoes_realtime",
+        f"{SCHEMA_SILVER}.acoes",
+        f"{SCHEMA_SILVER}.bcb",
+        f"{SCHEMA_SILVER}.world_bank",
+        f"{SCHEMA_SILVER}.clientes",
+        f"{SCHEMA_SILVER}.ordens",
+        f"{SCHEMA_SILVER}.streaming",
+        f"{SCHEMA_GOLD}.anomalias",
+        f"{SCHEMA_GOLD}.posicao_clientes",
+        f"{SCHEMA_GOLD}.score_risco_clientes",
+        f"{SCHEMA_GOLD}.deteccao_fraude",
+        f"{SCHEMA_GOLD}.fraude_streaming",
+        f"{SCHEMA_GOLD}.anomalias_intraday",
+        f"{SCHEMA_GOLD}.volume_intraday",
+        f"{SCHEMA_GOLD}.ranking_acoes_realtime",
     ]
 
     print(f"Monitorando {len(tabelas)} tabelas...")

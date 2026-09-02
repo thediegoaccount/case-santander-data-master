@@ -13,6 +13,7 @@ from datetime import datetime
 from databricks.connect import DatabricksSession
 
 from src.observability.monitoring import executar_monitoramento
+from src.config.tables import SCHEMA_GOLD, SCHEMA_SILVER
 
 
 def main():
@@ -24,13 +25,16 @@ def main():
     resultados = executar_monitoramento(spark)
 
     if resultados:
-        spark.sql("DROP TABLE IF EXISTS case_santander.gold.observabilidade")
-
+        # Sem DROP: os jobs de streaming leem MAX(versao_cdf) desta tabela
+        # como marca d'agua do CDC, e o DROP diario destruia tanto o
+        # historico quanto as propriedades da tabela.
         df_metricas = spark.createDataFrame(resultados)
         # fmt: off
         df_metricas.write \
             .format("delta") \
-            .saveAsTable("case_santander.gold.observabilidade")
+            .mode("overwrite") \
+            .option("mergeSchema", "true") \
+            .saveAsTable(f"{SCHEMA_GOLD}.observabilidade")
         # fmt: on
 
     # Manutenção Delta: OPTIMIZE compacta small files e VACUUM remove
@@ -38,16 +42,16 @@ def main():
     info("job_observabilidade", "\nExecutando manutenção Delta (OPTIMIZE + VACUUM)...")
     # fmt: off
     tabelas_manutencao = [
-        ("case_santander.silver.acoes",              "ticker, ano, mes"),
-        ("case_santander.silver.ordens",             "hash_cliente, ticker"),
-        ("case_santander.silver.clientes",           "hash_cliente"),
-        ("case_santander.silver.streaming",          "ticker, hora"),
-        ("case_santander.gold.anomalias",            "ticker"),
-        ("case_santander.gold.performance_acoes",    "ticker, ano"),
-        ("case_santander.gold.deteccao_fraude",      "score_fraude"),
-        ("case_santander.gold.fraude_streaming",     "score_fraude"),
-        ("case_santander.gold.posicao_clientes",     "ticker"),
-        ("case_santander.gold.score_risco_clientes", "categoria_risco"),
+        (f"{SCHEMA_SILVER}.acoes",              "ticker, ano, mes"),
+        (f"{SCHEMA_SILVER}.ordens",             "hash_cliente, ticker"),
+        (f"{SCHEMA_SILVER}.clientes",           "hash_cliente"),
+        (f"{SCHEMA_SILVER}.streaming",          "ticker, hora"),
+        (f"{SCHEMA_GOLD}.anomalias",            "ticker"),
+        (f"{SCHEMA_GOLD}.performance_acoes",    "ticker, ano"),
+        (f"{SCHEMA_GOLD}.deteccao_fraude",      "score_fraude"),
+        (f"{SCHEMA_GOLD}.fraude_streaming",     "score_fraude"),
+        (f"{SCHEMA_GOLD}.posicao_clientes",     "ticker"),
+        (f"{SCHEMA_GOLD}.score_risco_clientes", "categoria_risco"),
     ]
     # fmt: on
 
@@ -64,5 +68,5 @@ def main():
     info("job_observabilidade", f"Tabelas monitoradas: {len(resultados)}")
     info("job_observabilidade", f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
-
-main()
+if __name__ == "__main__":
+    main()

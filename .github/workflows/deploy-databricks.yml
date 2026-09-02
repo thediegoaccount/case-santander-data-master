@@ -47,7 +47,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install databricks-cli pyyaml
+          pip install pyyaml
 
       - name: Validate databricks.yml syntax
         run: |
@@ -91,8 +91,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install Databricks CLI
-        run: |
-          pip install databricks-cli
+        uses: databricks/setup-cli@main
 
       - name: Configure Databricks CLI
         env:
@@ -110,7 +109,7 @@ jobs:
           DATABRICKS_HOST_DEV: ${{ secrets.DATABRICKS_HOST_DEV }}
           DATABRICKS_TOKEN_DEV: ${{ secrets.DATABRICKS_TOKEN_DEV }}
         run: |
-          databricks bundle deploy --target dev 2>&1 | tee deploy.log
+          databricks bundle deploy --target hk 2>&1 | tee deploy.log
           echo " Asset Bundle deployed to DEV"
 
       - name: Verify Jobs Created
@@ -151,8 +150,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install Databricks CLI
-        run: |
-          pip install databricks-cli
+        uses: databricks/setup-cli@main
 
       - name: Configure Databricks CLI
         env:

@@ -1,17 +1,27 @@
 """
 Testes de Qualidade de Dados
 
-Valida qualidade de dados em cada camada (Bronze, Silver, Gold)
+Valida qualidade de dados em cada camada (Bronze, Silver, Gold).
+
+Contrato destes testes: a leitura da tabela pode pular o teste (a tabela
+pode não existir no ambiente), mas TODA verificação de qualidade roda fora
+do try/except e reprova de verdade quando o dado está ruim.
 """
 
-import pytest
-from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+
+from tests.conftest import read_table_or_skip
+from src.config.tables import SCHEMA_BRONZE, SCHEMA_GOLD, SCHEMA_SILVER
+
+# A tabela de fraude é gravada por src/gold/fraude.py como deteccao_fraude.
+# O teste antigo lia "gold.fraude", que nunca existiu — e o skip escondia isso.
+TB_BRONZE_CLIENTES = f"{SCHEMA_BRONZE}.clientes"
+TB_SILVER_CLIENTES = f"{SCHEMA_SILVER}.clientes"
+TB_GOLD_FRAUDE = f"{SCHEMA_GOLD}.deteccao_fraude"
 
 
 def test_bronze_clientes_completeness(spark_session):
     """Testa se bronze.clientes tem todas as colunas obrigatórias"""
-    # Schema esperado
     expected_columns = [
         "id_cliente",
         "hash_cliente",
@@ -19,93 +29,76 @@ def test_bronze_clientes_completeness(spark_session):
         "sobrenome_masked",
         "score_risco",
         "saldo",
-        "ativo"
+        "ativo",
     ]
-    
-    # Tentar ler tabela (pode não existir em ambiente de teste)
-    try:
-        df = spark_session.table("case_santander.bronze.clientes")
-        actual_columns = df.columns
-        
-        # Verificar se todas as colunas esperadas existem
-        for col in expected_columns:
-            assert col in actual_columns, f"Coluna faltando: {col}"
-    except Exception:
-        # Tabela não existe - marcar como skip
-        pytest.skip("Tabela bronze.clientes não existe")
+
+    df = read_table_or_skip(spark_session, TB_BRONZE_CLIENTES)
+
+    faltando = [c for c in expected_columns if c not in df.columns]
+    assert not faltando, f"Colunas faltando em {TB_BRONZE_CLIENTES}: {faltando}"
 
 
 def test_bronze_clientes_uniqueness(spark_session):
     """Testa se hash_cliente é único em bronze.clientes"""
-    try:
-        df = spark_session.table("case_santander.bronze.clientes")
-        
-        # Verificar duplicados
-        duplicates = df.groupBy("hash_cliente").count().filter(F.col("count") > 1)
-        assert duplicates.count() == 0, "hash_cliente tem duplicados"
-    except Exception:
-        pytest.skip("Tabela bronze.clientes não existe")
+    df = read_table_or_skip(spark_session, TB_BRONZE_CLIENTES)
+
+    duplicados = df.groupBy("hash_cliente").count().filter(F.col("count") > 1)
+    total_dup = duplicados.count()
+    assert total_dup == 0, f"hash_cliente tem {total_dup} valores duplicados"
 
 
 def test_silver_clientes_no_nulls(spark_session):
-    """Testa se silver.clientes não tem nulls em colunas críticas"""
-    try:
-        df = spark_session.table("case_santander.silver.clientes")
-        total = df.count()
-        
-        # Colunas críticas que não devem ter nulls
-        critical_columns = ["id_cliente", "hash_cliente", "nome"]
-        
-        for col in critical_columns:
-            null_count = df.filter(F.col(col).isNull()).count()
-            null_percentage = null_count / total if total > 0 else 0
-            assert null_percentage < 0.05, f"{col}: {null_percentage:.2%} nulos (max: 5%)"
-    except Exception:
-        pytest.skip("Tabela silver.clientes não existe")
+    """Testa se silver.clientes não tem nulls acima de 5% em colunas críticas"""
+    df = read_table_or_skip(spark_session, TB_SILVER_CLIENTES)
+
+    total = df.count()
+    assert total > 0, f"{TB_SILVER_CLIENTES} está vazia"
+
+    critical_columns = ["id_cliente", "hash_cliente", "nome"]
+    violacoes = []
+    for col in critical_columns:
+        nulos = df.filter(F.col(col).isNull()).count()
+        pct = nulos / total
+        if pct >= 0.05:
+            violacoes.append(f"{col}: {pct:.2%}")
+
+    assert not violacoes, f"Nulos acima de 5% (max permitido): {violacoes}"
 
 
 def test_gold_fraude_not_empty(spark_session):
-    """Testa se gold.fraude tem dados"""
-    try:
-        df = spark_session.table("case_santander.gold.fraude")
-        assert df.count() > 0, "gold.fraude está vazio"
-    except Exception:
-        pytest.skip("Tabela gold.fraude não existe")
+    """Testa se a tabela de detecção de fraude tem dados e as colunas de score"""
+    df = read_table_or_skip(spark_session, TB_GOLD_FRAUDE)
+
+    assert df.count() > 0, f"{TB_GOLD_FRAUDE} está vazia"
+
+    # Regressão: src/gold/fraude.py já gravou esta tabela sem nenhuma coluna
+    # de fraude, porque a cadeia .withColumn estava presa ao ramo else do
+    # join. Este assert pega essa classe de erro.
+    esperadas = ["score_fraude", "total_alertas", "requer_revisao", "data_processamento"]
+    faltando = [c for c in esperadas if c not in df.columns]
+    assert not faltando, f"Colunas de fraude ausentes: {faltando}"
 
 
 def test_schema_drift_detection(spark_session):
-    """Testa se schema das tabelas não mudou inesperadamente"""
-    try:
-        # Schema esperado para bronze.clientes
-        expected_schema = {
-            "id_cliente": "string",
-            "hash_cliente": "string",
-            "nome": "string",
-            "sobrenome_masked": "string",
-            "score_risco": "int",
-            "saldo": "double",
-            "ativo": "boolean"
-        }
-        
-        df = spark_session.table("case_santander.bronze.clientes")
-        actual_schema = {field.name: field.dataType.typeName() for field in df.schema.fields}
-        
-        # Verificar se schema está consistente
-        for col, dtype in expected_schema.items():
-            assert col in actual_schema, f"Coluna faltando: {col}"
-            assert actual_schema[col] == dtype, f"Tipo incorreto para {col}: esperado {dtype}, atual {actual_schema[col]}"
-    except Exception:
-        pytest.skip("Tabela bronze.clientes não existe")
+    """Testa se o schema de bronze.clientes não mudou inesperadamente"""
+    expected_schema = {
+        "id_cliente": "string",
+        "hash_cliente": "string",
+        "nome": "string",
+        "sobrenome_masked": "string",
+        "score_risco": "integer",
+        "saldo": "double",
+        "ativo": "boolean",
+    }
 
+    df = read_table_or_skip(spark_session, TB_BRONZE_CLIENTES)
+    actual_schema = {f.name: f.dataType.typeName() for f in df.schema.fields}
 
-@pytest.fixture(scope="session")
-def spark_session():
-    """Fixture para Spark session"""
-    spark = SparkSession.builder \
-        .appName("test_data_quality") \
-        .master("local[1]") \
-        .getOrCreate()
-    
-    yield spark
-    
-    spark.stop()
+    problemas = []
+    for col, dtype in expected_schema.items():
+        if col not in actual_schema:
+            problemas.append(f"{col}: ausente")
+        elif actual_schema[col] != dtype:
+            problemas.append(f"{col}: esperado {dtype}, atual {actual_schema[col]}")
+
+    assert not problemas, f"Schema drift em {TB_BRONZE_CLIENTES}: {problemas}"

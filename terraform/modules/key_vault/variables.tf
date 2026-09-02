@@ -31,6 +31,11 @@ variable "object_id" {
   sensitive   = true
 }
 
+variable "databricks_sp_object_id" {
+  description = "Object ID do service principal AzureDatabricks no tenant"
+  type        = string
+}
+
 variable "tags" {
   description = "Tags for resources"
   type        = map(string)

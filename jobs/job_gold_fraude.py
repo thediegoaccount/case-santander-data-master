@@ -3,11 +3,11 @@ Job: Gold Fraude
 Detecta fraudes em ordens de clientes cruzando dados de ordens com score de risco.
 
 Depende de:
-  - case_santander.silver.ordens
-  - case_santander.gold.score_risco_clientes
+  - <catalog>.<env>_silver.ordens
+  - <catalog>.<env>_gold.score_risco_clientes
 
 Produz:
-  - case_santander.gold.deteccao_fraude
+  - <catalog>.<env>_gold.deteccao_fraude
 
 Ou via Databricks Workflow:
     Task: t3_fraude
@@ -24,6 +24,7 @@ from datetime import datetime
 from databricks.connect import DatabricksSession
 
 from src.gold.fraude import detectar_fraude
+from src.config.tables import SCHEMA_GOLD, SCHEMA_SILVER
 
 
 def main():
@@ -38,5 +39,5 @@ def main():
     info("job_gold_fraude", "\n=== JOB GOLD FRAUDE CONCLUIDO ===")
     info("job_gold_fraude", f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
-
-main()
+if __name__ == "__main__":
+    main()

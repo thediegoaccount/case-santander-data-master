@@ -17,6 +17,7 @@ from datetime import datetime
 from databricks.connect import DatabricksSession
 from databricks.sdk.runtime import dbutils
 from pyspark.sql import functions as F
+from src.config.tables import SCHEMA_GOLD, SCHEMA_SILVER
 
 
 def main():
@@ -28,11 +29,11 @@ def main():
 
     # GOLD 1 — Posicao do cliente (carteira)
     info("job_corretora_analises", "Calculando posicao dos clientes...")
-    df_ordens = spark.sql("SELECT * FROM case_santander.silver.ordens")
+    df_ordens = spark.sql(f"SELECT * FROM {SCHEMA_SILVER}.ordens")
     # fmt: off
-    df_clientes = spark.sql("""
+    df_clientes = spark.sql(f"""
         SELECT hash_cliente, perfil_risco, faixa_saldo, score_credito
-        FROM case_santander.silver.clientes
+        FROM {SCHEMA_SILVER}.clientes
     """)
     # fmt: on
 
@@ -61,7 +62,7 @@ def main():
 
     df_posicao.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.gold.posicao_clientes")
+        .saveAsTable(f"{SCHEMA_GOLD}.posicao_clientes")
     info("job_corretora_analises", " gold.posicao_clientes gravado")
 
     # GOLD 2 — Score de risco
@@ -114,11 +115,11 @@ def main():
 
     df_score.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.gold.score_risco_clientes")
+        .saveAsTable(f"{SCHEMA_GOLD}.score_risco_clientes")
     info("job_corretora_analises", " gold.score_risco_clientes gravado")
 
     # GOLD 3 — Perfil clientes
-    df_perfil = spark.sql("""
+    df_perfil = spark.sql(f"""
         SELECT
             perfil_risco, faixa_etaria, score_categoria, pais,
             COUNT(*) as total_clientes,
@@ -127,45 +128,45 @@ def main():
             ROUND(AVG(salario_estimado), 2) as salario_medio,
             SUM(CASE WHEN churn THEN 1 ELSE 0 END) as total_churn,
             ROUND(AVG(CASE WHEN churn THEN 1.0 ELSE 0.0 END) * 100, 2) as taxa_churn_pct
-        FROM case_santander.silver.clientes
+        FROM {SCHEMA_SILVER}.clientes
         GROUP BY perfil_risco, faixa_etaria, score_categoria, pais
         ORDER BY total_clientes DESC
     """)
     df_perfil.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.gold.perfil_clientes")
+        .saveAsTable(f"{SCHEMA_GOLD}.perfil_clientes")
     info("job_corretora_analises", " gold.perfil_clientes gravado")
 
     # GOLD 4 — Ordens consolidadas
-    df_ordens_gold = spark.sql("""
+    df_ordens_gold = spark.sql(f"""
         SELECT ticker, perfil_risco, faixa_saldo, tipo, status, ano,
             COUNT(*) as total_ordens,
             ROUND(SUM(valor_total), 2) as volume_total,
             ROUND(AVG(preco), 2) as preco_medio,
             ROUND(AVG(quantidade), 0) as qtd_media
-        FROM case_santander.silver.ordens
+        FROM {SCHEMA_SILVER}.ordens
         GROUP BY ticker, perfil_risco, faixa_saldo, tipo, status, ano
         ORDER BY volume_total DESC
     """)
     df_ordens_gold.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.gold.ordens_consolidadas")
+        .saveAsTable(f"{SCHEMA_GOLD}.ordens_consolidadas")
     info("job_corretora_analises", " gold.ordens_consolidadas gravado")
 
     # GOLD 5 — Ranking acoes por perfil
-    df_ranking = spark.sql("""
+    df_ranking = spark.sql(f"""
         SELECT ticker, perfil_risco,
             COUNT(*) as total_ordens,
             ROUND(SUM(valor_total), 2) as volume_total,
             ROUND(AVG(preco), 2) as preco_medio
-        FROM case_santander.silver.ordens
+        FROM {SCHEMA_SILVER}.ordens
         WHERE status = 'executada'
         GROUP BY ticker, perfil_risco
         ORDER BY volume_total DESC
     """)
     df_ranking.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.gold.ranking_acoes_perfil")
+        .saveAsTable(f"{SCHEMA_GOLD}.ranking_acoes_perfil")
     info("job_corretora_analises", " gold.ranking_acoes_perfil gravado")
 
     # fmt: on
@@ -174,5 +175,5 @@ def main():
     info("job_corretora_analises", "\n=== JOB CORRETORA ANALISES CONCLUIDO ===")
     info("job_corretora_analises", f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
-
-main()
+if __name__ == "__main__":
+    main()

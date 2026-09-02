@@ -16,7 +16,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.11'
       
       - name: Install dependencies
         run: |
@@ -24,7 +24,7 @@ jobs:
           
       - name: Run data quality tests
         run: |
-          pytest tests/test_data_quality.py -v
+          pytest tests/ -v
           
       - name: Upload test results
         if: always()

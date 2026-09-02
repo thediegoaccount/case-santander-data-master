@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+from src.config.tables import register_external_table
+from src.quality.data_quality import DataQualityValidator
 
 
 def transformar_bcb(spark: SparkSession, storage_account: str) -> int:
@@ -38,6 +40,22 @@ def transformar_bcb(spark: SparkSession, storage_account: str) -> int:
         .option("mergeSchema", "true") \
         .save(silver_path)
     # fmt: on
+
+    # Gate de qualidade ANTES de publicar. O framework de 228 linhas em
+    # src/quality/data_quality.py nao tinha um unico call site em codigo
+    # executavel -- so aparecia em documentacao. Falha aqui aborta o job em
+    # vez de propagar dado ruim para a camada gold.
+    DataQualityValidator("silver_bcb").run_all_validations(df_silver, {
+        "completeness": {"required_columns": ["data", "indicador", "valor"]},
+        "row_count": {"min_rows": 1},
+    })
+
+    # Registra o path como tabela externa no Unity Catalog.
+    # Os consumidores gold leem via `FROM <catalog>.<env>_silver.bcb`, mas
+    # nada criava essa tabela: as transformacoes gravavam so em path. Tres
+    # tasks gold morriam com TABLE_OR_VIEW_NOT_FOUND. Quem escreve registra,
+    # entao a ordem fica correta por construcao.
+    register_external_table(spark, "silver", "bcb", silver_path)
 
     print("Silver BCB gravado")
     return 0  # Metrics in Spark UI

@@ -6,6 +6,8 @@ from datetime import datetime
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+from src.config.tables import register_external_table
+from src.quality.data_quality import DataQualityValidator
 
 
 def transformar_acoes(spark: SparkSession, storage_account: str) -> int:
@@ -68,6 +70,23 @@ def transformar_acoes(spark: SparkSession, storage_account: str) -> int:
         .partitionBy("ano", "mes") \
         .save(silver_path)
     # fmt: on
+
+    # Gate de qualidade ANTES de publicar. O framework de 228 linhas em
+    # src/quality/data_quality.py nao tinha um unico call site em codigo
+    # executavel -- so aparecia em documentacao. Falha aqui aborta o job em
+    # vez de propagar dado ruim para a camada gold.
+    DataQualityValidator("silver_acoes").run_all_validations(df_silver, {
+        "completeness": {"required_columns": ["date", "ticker", "close", "volume"]},
+        "row_count": {"min_rows": 1},
+        "nulls": {"max_null_percentage": 0.05},
+    })
+
+    # Registra o path como tabela externa no Unity Catalog.
+    # Os consumidores gold leem via `FROM <catalog>.<env>_silver.acoes`, mas
+    # nada criava essa tabela: as transformacoes gravavam so em path. Tres
+    # tasks gold morriam com TABLE_OR_VIEW_NOT_FOUND. Quem escreve registra,
+    # entao a ordem fica correta por construcao.
+    register_external_table(spark, "silver", "acoes", silver_path)
 
     print("Silver acoes gravado")
     return 0  # Metrics in Spark UI

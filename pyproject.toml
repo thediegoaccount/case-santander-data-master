@@ -21,3 +21,15 @@ ignore = ["E501"]
 [tool.isort]
 profile = "black"
 line_length = 120
+
+[tool.pytest.ini_options]
+# Sem testpaths, `pytest` na raiz coletava os scripts de diagnostico
+# test_apis*.py / test_kaggle.py / test_yahoo.py, disparando chamadas de
+# rede reais e download de dataset durante a suite.
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = [
+    # Teste que retorna valor em vez de usar assert vira erro em versoes
+    # futuras do pytest; queremos ver isso agora.
+    "error::pytest.PytestReturnNotNoneWarning",
+]

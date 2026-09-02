@@ -1,5 +1,28 @@
+# Dependencias de runtime do pipeline.
+#
+# Antes esta lista nao declarava pyspark, pandas, delta-spark, databricks-sdk,
+# PyYAML nem python-dotenv, todos importados pelo codigo -- os workflows
+# instalavam pyyaml na mao para compensar. databricks-cli (o CLI legado
+# v0.18, sem o subcomando `bundle`) foi removido: o CLI em Go e instalado
+# no CI via databricks/setup-cli.
+
+# Ingestao de dados
 yfinance==0.2.37
-requests==2.31.0
+requests>=2.31.0
 azure-eventhub==5.15.1
+pandas>=2.0.0
+
+# Spark / Delta / Databricks
+# databricks-connect DEVE casar com a major.minor do DBR do cluster
+# (spark_version em databricks.yml). Ver DEPLOYMENT.md.
+pyspark==3.5.0
+delta-spark==3.1.0
+databricks-connect==14.3.*
+databricks-sdk>=0.20.0
+
+# Configuracao
+PyYAML>=6.0
+python-dotenv>=1.0.0
+
+# Testes
 pytest==7.4.0
-databricks-cli==0.18.0

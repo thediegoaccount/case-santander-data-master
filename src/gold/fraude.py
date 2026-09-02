@@ -6,6 +6,7 @@ from datetime import datetime
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+from src.config.tables import SCHEMA_GOLD, SCHEMA_SILVER
 
 
 def detectar_fraude(spark: SparkSession) -> int:
@@ -18,11 +19,11 @@ def detectar_fraude(spark: SparkSession) -> int:
     data_hoje = datetime.now().strftime("%Y-%m-%d")
     print("Detectando fraudes...")
 
-    df_ordens = spark.sql("SELECT * FROM case_santander.silver.ordens")
-    df_score = spark.sql("""
+    df_ordens = spark.sql(f"SELECT * FROM {SCHEMA_SILVER}.ordens")
+    df_score = spark.sql(f"""
         SELECT hash_cliente, score_risco,
                categoria_risco, limite_operacional
-        FROM case_santander.gold.score_risco_clientes
+        FROM {SCHEMA_GOLD}.score_risco_clientes
     """)
 
     # Validate broadcast size: df_score pode crescer com SCD Type-2
@@ -41,14 +42,15 @@ def detectar_fraude(spark: SparkSession) -> int:
         # Se erro na estimativa, usa broadcast conservativamente
         use_broadcast = True
 
-    # fmt: off
     if use_broadcast:
-        df_fraude = df_ordens \
-            .join(F.broadcast(df_score), on="hash_cliente", how="left")
+        df_join = df_ordens.join(
+            F.broadcast(df_score), on="hash_cliente", how="left")
     else:
         # Sort-merge join sem broadcast
-        df_fraude = df_ordens \
-            .join(df_score, on="hash_cliente", how="left") \
+        df_join = df_ordens.join(df_score, on="hash_cliente", how="left")
+
+    # fmt: off
+    df_fraude = df_join \
         .withColumn("alerta_valor_alto",
             F.when(F.col("valor_total") > F.col("limite_operacional"), True)
             .otherwise(False)) \
@@ -80,7 +82,7 @@ def detectar_fraude(spark: SparkSession) -> int:
         .format("delta") \
         .mode("overwrite") \
         .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.gold.deteccao_fraude")
+        .saveAsTable(f"{SCHEMA_GOLD}.deteccao_fraude")
     # fmt: on
 
     print("Gold fraude gravado")

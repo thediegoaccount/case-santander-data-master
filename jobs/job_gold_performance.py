@@ -3,10 +3,10 @@ Job: Gold Performance
 Calcula performance das ações por setor e período.
 
 Depende de:
-  - case_santander.silver.acoes
+  - <catalog>.<env>_silver.acoes
 
 Produz:
-  - case_santander.gold.performance_acoes
+  - <catalog>.<env>_gold.performance_acoes
 
 Ou via Databricks Workflow:
     Task: t3_performance
@@ -26,6 +26,7 @@ from src.config.secrets import get_secret
 
 from src.config.settings import configure_adls
 from src.gold.performance import calcular_performance
+from src.config.tables import SCHEMA_GOLD, SCHEMA_SILVER
 
 
 def main():
@@ -47,5 +48,5 @@ def main():
     info("job_gold_performance", "\n=== JOB GOLD PERFORMANCE CONCLUIDO ===")
     info("job_gold_performance", f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
-
-main()
+if __name__ == "__main__":
+    main()

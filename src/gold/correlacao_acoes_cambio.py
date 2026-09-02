@@ -8,6 +8,7 @@ from datetime import datetime
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
+from src.config.tables import SCHEMA_GOLD, SCHEMA_SILVER
 
 
 def correlacionar_acoes_cambio(spark: SparkSession) -> int:
@@ -25,14 +26,14 @@ def correlacionar_acoes_cambio(spark: SparkSession) -> int:
     print("Correlacionando ações vs câmbio...")
 
     # Ler dados Silver
-    df_acoes = spark.sql("""
+    df_acoes = spark.sql(f"""
         SELECT date, ticker, close, variacao_diaria_pct, volume, ano, mes
-        FROM case_santander.silver.acoes
+        FROM {SCHEMA_SILVER}.acoes
     """)
 
-    df_bcb = spark.sql("""
+    df_bcb = spark.sql(f"""
         SELECT data as date, valor as cambio
-        FROM case_santander.silver.bcb
+        FROM {SCHEMA_SILVER}.bcb
         WHERE indicador = 'cambio_usd_brl'
     """)
 
@@ -82,7 +83,7 @@ def correlacionar_acoes_cambio(spark: SparkSession) -> int:
             .otherwise("Baixa Correlacao")) \
         .withColumn("alerta_desacoplamento",
             F.when(
-                F.abs(F.col("variacao_media_pct")) > 5 &
+                (F.abs(F.col("variacao_media_pct")) > 5) &
                 (F.abs(F.col("cambio_variacao_pct")) < 1),
                 "Sim - Acao se desacoplou do cambio"
             )
@@ -109,7 +110,7 @@ def correlacionar_acoes_cambio(spark: SparkSession) -> int:
 
     # Gravar Gold
     df_resultado.write.format("delta").mode("overwrite").option("mergeSchema", "true").saveAsTable(
-        "case_santander.gold.acoes_vs_cambio"
+        f"{SCHEMA_GOLD}.acoes_vs_cambio"
     )
 
     print("Gold acoes_vs_cambio gravado")

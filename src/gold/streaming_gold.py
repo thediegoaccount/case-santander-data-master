@@ -12,6 +12,7 @@ from datetime import datetime
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+from src.config.tables import SCHEMA_GOLD, SCHEMA_SILVER
 
 
 def detectar_fraude_streaming(spark: SparkSession) -> int:
@@ -33,14 +34,14 @@ def detectar_fraude_streaming(spark: SparkSession) -> int:
     data_hoje = datetime.now().strftime("%Y-%m-%d")
     print("Detectando fraudes em transacoes streaming...")
 
-    df_stream = spark.sql("SELECT * FROM case_santander.silver.streaming")
+    df_stream = spark.sql(f"SELECT * FROM {SCHEMA_SILVER}.streaming")
 
     # Usa o ano mais recente de performance como referencia de preco historico
     # fmt: off
-    df_perf = spark.sql("""
+    df_perf = spark.sql(f"""
         SELECT ticker, preco_medio, volatilidade
-        FROM case_santander.gold.performance_acoes
-        WHERE ano = (SELECT MAX(ano) FROM case_santander.gold.performance_acoes)
+        FROM {SCHEMA_GOLD}.performance_acoes
+        WHERE ano = (SELECT MAX(ano) FROM {SCHEMA_GOLD}.performance_acoes)
     """)
     # fmt: on
 
@@ -89,7 +90,7 @@ def detectar_fraude_streaming(spark: SparkSession) -> int:
         .format("delta") \
         .mode("overwrite") \
         .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.gold.fraude_streaming")
+        .saveAsTable(f"{SCHEMA_GOLD}.fraude_streaming")
     # fmt: on
 
     print("Gold fraude_streaming gravado")
@@ -109,7 +110,7 @@ def detectar_anomalias_intraday(spark: SparkSession) -> int:
     data_hoje = datetime.now().strftime("%Y-%m-%d")
     print("Detectando anomalias intraday...")
 
-    df_stream = spark.sql("SELECT * FROM case_santander.silver.streaming")
+    df_stream = spark.sql(f"SELECT * FROM {SCHEMA_SILVER}.streaming")
 
     # fmt: off
     df_hora = df_stream \
@@ -123,10 +124,10 @@ def detectar_anomalias_intraday(spark: SparkSession) -> int:
     # fmt: on
 
     # fmt: off
-    df_perf = spark.sql("""
+    df_perf = spark.sql(f"""
         SELECT ticker, preco_medio, volatilidade
-        FROM case_santander.gold.performance_acoes
-        WHERE ano = (SELECT MAX(ano) FROM case_santander.gold.performance_acoes)
+        FROM {SCHEMA_GOLD}.performance_acoes
+        WHERE ano = (SELECT MAX(ano) FROM {SCHEMA_GOLD}.performance_acoes)
     """)
     # fmt: on
 
@@ -155,7 +156,7 @@ def detectar_anomalias_intraday(spark: SparkSession) -> int:
         .format("delta") \
         .mode("overwrite") \
         .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.gold.anomalias_intraday")
+        .saveAsTable(f"{SCHEMA_GOLD}.anomalias_intraday")
     # fmt: on
 
     print("Gold anomalias_intraday gravado")
@@ -178,7 +179,7 @@ def calcular_volume_intraday(spark: SparkSession) -> int:
     data_hoje = datetime.now().strftime("%Y-%m-%d")
     print("Calculando volume intraday...")
 
-    df_stream = spark.sql("SELECT * FROM case_santander.silver.streaming")
+    df_stream = spark.sql(f"SELECT * FROM {SCHEMA_SILVER}.streaming")
 
     # fmt: off
     df_vol = df_stream \
@@ -196,10 +197,10 @@ def calcular_volume_intraday(spark: SparkSession) -> int:
     # fmt: on
 
     # fmt: off
-    df_perf = spark.sql("""
+    df_perf = spark.sql(f"""
         SELECT ticker, volume_medio
-        FROM case_santander.gold.performance_acoes
-        WHERE ano = (SELECT MAX(ano) FROM case_santander.gold.performance_acoes)
+        FROM {SCHEMA_GOLD}.performance_acoes
+        WHERE ano = (SELECT MAX(ano) FROM {SCHEMA_GOLD}.performance_acoes)
     """)
     # fmt: on
 
@@ -227,7 +228,7 @@ def calcular_volume_intraday(spark: SparkSession) -> int:
         .format("delta") \
         .mode("overwrite") \
         .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.gold.volume_intraday")
+        .saveAsTable(f"{SCHEMA_GOLD}.volume_intraday")
     # fmt: on
 
     print("Gold volume_intraday gravado")
@@ -249,7 +250,7 @@ def calcular_ranking_realtime(spark: SparkSession) -> int:
     data_hoje = datetime.now().strftime("%Y-%m-%d")
     print("Calculando ranking de ativos em tempo real...")
 
-    df_stream = spark.sql("SELECT * FROM case_santander.silver.streaming")
+    df_stream = spark.sql(f"SELECT * FROM {SCHEMA_SILVER}.streaming")
 
     # fmt: off
     df_rank = df_stream \
@@ -267,10 +268,10 @@ def calcular_ranking_realtime(spark: SparkSession) -> int:
     # fmt: on
 
     # fmt: off
-    df_perf = spark.sql("""
+    df_perf = spark.sql(f"""
         SELECT ticker, empresa, setor, preco_medio as preco_medio_historico
-        FROM case_santander.gold.performance_acoes
-        WHERE ano = (SELECT MAX(ano) FROM case_santander.gold.performance_acoes)
+        FROM {SCHEMA_GOLD}.performance_acoes
+        WHERE ano = (SELECT MAX(ano) FROM {SCHEMA_GOLD}.performance_acoes)
     """)
     # fmt: on
 
@@ -295,7 +296,7 @@ def calcular_ranking_realtime(spark: SparkSession) -> int:
         .format("delta") \
         .mode("overwrite") \
         .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.gold.ranking_acoes_realtime")
+        .saveAsTable(f"{SCHEMA_GOLD}.ranking_acoes_realtime")
     # fmt: on
 
     print("Gold ranking_acoes_realtime gravado")
