@@ -346,8 +346,8 @@ requer_revisao = (total_alertas >= 2)
 
 **Saída:** `case_santander.gold.deteccao_fraude`
 
-- Total: ~5.341 ordens
-- Críticas: ~302 (6%)
+- Total: 5.440 ordens (exato e reproduzível — `random.seed(42)`, ver nota ² no [README](../README.md#unity-catalog--estrutura-de-dados))
+- Críticas: ~6% do total
 
 ---
 
@@ -1630,7 +1630,7 @@ spark.read \
 | Join | Lado broadcast | Tamanho estimado | Shuffle evitado |
 |---|---|---|---|
 | `silver.streaming` × `performance_acoes` | `df_perf` — 9 linhas | < 1 KB | Sort-merge de 200+ transações |
-| `silver.ordens` × `score_risco_clientes` | `df_score` — 7.900 × 4 cols | ~600 KB | Sort-merge de 5.341 ordens |
+| `silver.ordens` × `score_risco_clientes` | `df_score` — 7.900 × 4 cols | ~600 KB | Sort-merge de 5.440 ordens |
 | `df_posicao` × `silver.clientes` | `df_clientes` — 10.000 × 4 cols | ~800 KB | Sort-merge de milhares de posições |
 
 ```python

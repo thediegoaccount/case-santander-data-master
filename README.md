@@ -135,27 +135,27 @@ case_santander/
     acoes        → 8.534 reg  · Parquet · Yahoo Finance
     bcb          → 3.068 reg  · Delta   · BCB API
     world_bank   →    59 reg  · Delta   · World Bank API
-    kafka        →   200 reg  · Delta   · Azure Event Hub
+    kafka        → ~200 reg  · Delta   · Azure Event Hub ¹
     clientes     → 10.000 reg · Delta   · Kaggle (LGPD aplicada)
-    ordens       →  5.341 reg · Delta   · Simulado Python
+    ordens       →  5.440 reg · Delta   · Simulado Python ²
  silver/
     acoes        → 8.530 reg  · variação%, empresa, setor
     bcb          → 3.068 reg  · data tipada, 6 casas decimais
     world_bank   →    59 reg  · ano int, mergeSchema
     clientes     → 10.000 reg · faixa_etaria, score_categoria
     clientes_scd → histórico  · SCD Type 2 (perfil_risco, score)
-    ordens       →  5.341 reg · data_ordem tipada
-    streaming    →   200 reg  · alertas volume/preço (CDC habilitado)
+    ordens       →  5.440 reg · data_ordem tipada ²
+    streaming    → ~200 reg  · alertas volume/preço (CDC habilitado) ¹
  gold/
       anomalias              → 4.524 reg  · Z-Score por ticker
       performance_acoes      →    27 reg  · por setor/ano
       acoes_vs_cambio        → 4.507 reg  · cruzamento BCB
-      posicao_clientes       → 3.931 reg  · P&L, situação
+      posicao_clientes       → ~3.900 reg  · P&L, situação ³
       score_risco_clientes   →  1.000 reg · score ponderado
       score_risco_scd        → histórico  · SCD Type 2
-      deteccao_fraude        → 5.341 reg  · 4 regras, Normal→Crítico
+      deteccao_fraude        →  5.440 reg  · 4 regras, Normal→Crítico ²
       perfil_clientes        →    45 reg  · segmentação
-      ordens_consolidadas    →   893 reg  · volume por ticker
+      ordens_consolidadas    →   ~890 reg  · volume por ticker ³
       ranking_acoes_perfil   → variável
       fraude_streaming       → variável   · fraude em tempo real (via silver.streaming)
       anomalias_intraday     → variável   · Z-Score intraday (via silver.streaming)
@@ -163,6 +163,24 @@ case_santander/
       ranking_acoes_realtime → variável   · ranking por volume em tempo real (via silver.streaming)
       observabilidade        → crescente  · métricas de qualidade
 ```
+
+¹ **Streaming (Event Hub):** `scripts/eventhub_producer_advanced.py` publica as transações
+simuladas — `--burst N`/`--volume N` para um total fixo e reproduzível (seed 42), ou modo
+contínuo para simular produção. `job_streaming.py` / `job_streaming_continuous.py` só leem via
+Auto Loader o que o producer já publicou; não geram dado. Ver [`docs/eventhub-producer.md`](docs/eventhub-producer.md).
+
+² **Ordens simuladas (batch):** `job_clientes_ordens.py` sorteia uma amostra de 1.000 clientes e,
+para cada um, um número aleatório de 1 a 10 ordens, com `random.seed(42)` fixo (Python) e
+`random_state=42` fixo (amostragem pandas — usa gerador próprio, precisa de seed separada).
+Resultado: **5.440 é o total exato e reproduzível** em qualquer execução, contado independente
+da identidade dos clientes sorteados. `deteccao_fraude` herda o mesmo total: é um `left join`
+1:1 de `ordens` com `score_risco_clientes` (já deduplicado), sem fan-out.
+
+³ **Agregações por cliente/ticker:** `posicao_clientes` e `ordens_consolidadas` agrupam as
+5.440 ordens por combinações de cliente e ticker — a contagem de linhas depende de *quais*
+clientes foram sorteados (não só de quantos), então não é derivável sem os dados reais do
+Kaggle. Com a seed fixa, porém, o resultado passa a ser o mesmo em toda execução; os valores
+acima são de uma execução de referência.
 
 ## Fluxo de orquestração — Databricks Workflow
 

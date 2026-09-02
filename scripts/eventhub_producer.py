@@ -14,6 +14,11 @@ import time
 from datetime import datetime, timedelta
 from azure.eventhub import EventHubProducerClient, EventData
 
+# Seed fixa: torna a sequência de transações geradas (ticker, preço, tipo, corretora,
+# intervalo de envio) reproduzível entre execuções. Não fixa o TOTAL de eventos — isso
+# ainda depende de quanto tempo o script roda antes do Ctrl+C.
+random.seed(42)
+
 # Configurações
 EVENT_HUB_CONNECTION_STR = "YOUR_EVENT_HUB_CONNECTION_STRING"
 EVENT_HUB_NAME = "transacoes-financeiras"

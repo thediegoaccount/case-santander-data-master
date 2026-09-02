@@ -159,10 +159,16 @@ def main():
             raise e
 
     # Gerar ordens simuladas
+    # Seed fixa: torna o volume de ordens reproduzível entre execuções (mesma amostra de
+    # clientes, mesmas ordens). df.sample() do pandas usa seu próprio gerador — precisa de
+    # random_state próprio, fixar apenas random.seed() não é suficiente.
+    ORDENS_SEED = 42
+    random.seed(ORDENS_SEED)
+
     acoes = ["PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA",
              "ABEV3.SA", "MGLU3.SA", "WEGE3.SA", "BBAS3.SA", "SANB11.SA"]
 
-    clientes_amostra = df_clientes_final.sample(1000).to_dict("records")
+    clientes_amostra = df_clientes_final.sample(1000, random_state=ORDENS_SEED).to_dict("records")
     ordens = []
     ordem_counter = 0
 

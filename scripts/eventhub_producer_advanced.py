@@ -32,6 +32,11 @@ from dotenv import load_dotenv
 # Carregar variáveis de ambiente
 load_dotenv()
 
+# Seed fixa: em --volume/--burst (contagem fixa), torna a sequência inteira de transações
+# reproduzível — mesmo conteúdo, execução após execução. No modo contínuo, fixa apenas a
+# sequência gerada; o total ainda depende de quanto tempo o script roda.
+random.seed(42)
+
 # Configurações (variáveis de ambiente)
 EVENT_HUB_CONNECTION_STR = os.getenv("EVENTHUB_CONNECTION_STRING")
 EVENT_HUB_NAME = os.getenv("EVENTHUB_NAME", "transacoes-financeiras")
