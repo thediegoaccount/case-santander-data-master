@@ -3,11 +3,11 @@ Job: Gold Ações vs Câmbio
 Correlaciona performance de ações com variações do câmbio USD/BRL.
 
 Depende de:
-  - case_santander.silver.acoes
-  - case_santander.silver.bcb
+  - <catalog>.<env>_silver.acoes
+  - <catalog>.<env>_silver.bcb
 
 Produz:
-  - case_santander.gold.acoes_vs_cambio
+  - <catalog>.<env>_gold.acoes_vs_cambio
 
 Ou via Databricks Workflow:
     Task: t3_gold_acoes_vs_cambio
@@ -27,6 +27,7 @@ from src.config.secrets import get_secret
 
 from src.config.settings import configure_adls
 from src.gold.correlacao_acoes_cambio import correlacionar_acoes_cambio
+from src.config.tables import SCHEMA_GOLD, SCHEMA_SILVER
 
 
 def main():
@@ -48,5 +49,5 @@ def main():
     info("job_gold_acoes_vs_cambio", "\n=== JOB GOLD ACOES VS CAMBIO CONCLUIDO ===")
     info("job_gold_acoes_vs_cambio", f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
-
-main()
+if __name__ == "__main__":
+    main()

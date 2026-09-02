@@ -62,15 +62,31 @@ class EnvironmentConfig:
         if env is None:
             env = EnvironmentConfig.get_current_env()
 
+        # Nomenclatura derivada da MESMA convencao do Terraform
+        # (terraform/modules/*). Confira com: terraform output resource_names
+        #
+        #   storage      stcasesantander<env>      sem hifen: Azure so aceita
+        #                                          minusculas e digitos
+        #   key vault    kv-case-santander-<env>   nome tambem usado como
+        #                                          secret scope do Databricks
+        #   eventhub ns  evhcasesantander-<env>
+        #   eventhub     transacoes-financeiras-<env>
+        #
+        # Cada nome aceita override por variavel de ambiente, para o caso de
+        # os defaults do Terraform terem sido alterados no tfvars.
+        names = {
+            "storage_account": os.getenv("STORAGE_ACCOUNT", f"stcasesantander{env}"),
+            "key_vault": os.getenv("KEY_VAULT_NAME", f"kv-case-santander-{env}"),
+            "eventhub_ns": os.getenv("EVENTHUB_NAMESPACE", f"evhcasesantander-{env}"),
+            "eventhub_name": os.getenv("EVENTHUB_NAME", f"transacoes-financeiras-{env}"),
+        }
+
         configs = {
             "hk": {
-                "storage_account": "stcasesantander-hk",
-                "key_vault": "kv-case-santander-hk",
+                **names,
                 "catalog": "case_santander",  # Mesmo catalog, schemas separados
                 "schema_prefix": "hk_",  # Schemas: hk_bronze, hk_silver, hk_gold
-                "eventhub_ns": "evhcasesantander-hk",
-                "eventhub_name": "transacoes-financeiras-hk",
-                "databricks_workspace": "adb-xxx-hk.azuredatabricks.net",
+                "databricks_workspace": os.getenv("DATABRICKS_HOST_HK", ""),
                 "api_rate_limit": {
                     "yahoo_finance": 15,  # requests/min (reduzido)
                     "bcb": 45,  # requests/min (reduzido)
@@ -82,13 +98,10 @@ class EnvironmentConfig:
                 "is_production": False,
             },
             "prod": {
-                "storage_account": "stcasesantander",
-                "key_vault": "kv-case-santander",
+                **names,
                 "catalog": "case_santander",  # Mesmo catalog, schemas separados
                 "schema_prefix": "prod_",  # Schemas: prod_bronze, prod_silver, prod_gold
-                "eventhub_ns": "evhcasesantander",
-                "eventhub_name": "transacoes-financeiras",
-                "databricks_workspace": "adb-xxx.azuredatabricks.net",
+                "databricks_workspace": os.getenv("DATABRICKS_HOST_PROD", ""),
                 "api_rate_limit": {
                     "yahoo_finance": 30,  # requests/min (completo)
                     "bcb": 120,  # requests/min (completo)
@@ -183,3 +196,20 @@ def get_paths() -> Dict[str, str]:
 def is_production() -> bool:
     """Verifica se é ambiente de produção"""
     return EnvironmentConfig.get_config()["is_production"]
+
+
+def setup_python_path() -> str:
+    """
+    Configura sys.path para importar módulos do repositório.
+
+    Importado por todos os jobs em jobs/. Existia apenas como staticmethod
+    de EnvironmentConfig, o que fazia
+    `from src.config.environment import setup_python_path` levantar
+    ImportError na primeira linha executável de cada job.
+    """
+    return EnvironmentConfig.setup_python_path()
+
+
+def get_repo_path() -> str:
+    """Retorna caminho do repositório"""
+    return EnvironmentConfig.get_repo_path()

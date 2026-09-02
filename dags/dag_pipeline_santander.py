@@ -50,10 +50,10 @@ with DAG(
     tags=["santander", "databricks", "financeiro", "synced", ENVIRONMENT],
 ) as dag:
 
-    # Setup Unity Catalog e schemas
+    # Cria os schemas do Unity Catalog (sem dependencia de dado)
     t0_unity_catalog = databricks_task(
         task_id="t0_unity_catalog",
-        job_path="jobs/job_unity_catalog.py"
+        job_path="jobs/job_unity_catalog_schemas.py"
     )
 
     # Extração Yahoo Finance
@@ -96,12 +96,6 @@ with DAG(
     t2_silver_world_bank = databricks_task(
         task_id="t2_silver_world_bank",
         job_path="jobs/job_silver_world_bank.py"
-    )
-
-    # Transformação Silver Clientes
-    t6_clientes_silver = databricks_task(
-        task_id="t6_clientes_silver",
-        job_path="jobs/job_clientes_silver.py"
     )
 
     # Gold Anomalias
@@ -158,6 +152,12 @@ with DAG(
         job_path="jobs/job_lakehouse_monitoring.py"
     )
 
+    # Registra tabelas bronze/gold no Unity Catalog e aplica clustering/CDF
+    t8b_uc_registro = databricks_task(
+        task_id="t8b_uc_registro",
+        job_path="jobs/job_unity_catalog.py"
+    )
+
     # Observabilidade
     t4_observabilidade = databricks_task(
         task_id="t4_observabilidade",
@@ -172,17 +172,17 @@ with DAG(
     [t1_extracao_acoes] >> t2_silver_acoes
     [t1_extracao_bcb] >> t2_silver_bcb
     [t1_extracao_world_bank] >> t2_silver_world_bank
-    [t6_clientes_ordens] >> t6_clientes_silver
-    [t2_silver_acoes, t2_silver_bcb, t2_silver_world_bank] >> t3_anomalias
-    [t2_silver_acoes, t2_silver_bcb, t2_silver_world_bank] >> t3_performance
-    [t2_silver_acoes, t2_silver_bcb, t2_silver_world_bank] >> t3_bcb
-    [t2_silver_acoes, t2_silver_bcb, t2_silver_world_bank] >> t3_world_bank
-    [t3_performance, t3_bcb] >> t3_acoes_cambio
-    [t6_clientes_silver] >> t7_corretora_analises
+    [t2_silver_acoes] >> t3_anomalias
+    [t2_silver_acoes] >> t3_performance
+    [t2_silver_bcb] >> t3_bcb
+    [t2_silver_world_bank] >> t3_world_bank
+    [t2_silver_acoes, t2_silver_bcb] >> t3_acoes_cambio
+    [t6_clientes_ordens] >> t7_corretora_analises
     [t7_corretora_analises] >> t9_scd
-    [t9_scd] >> t3_fraude
-    [t3_anomalias, t3_acoes_cambio, t3_world_bank, t3_fraude] >> t8_lakehouse_monitoring
-    [t8_lakehouse_monitoring] >> t4_observabilidade
+    [t7_corretora_analises] >> t3_fraude
+    [t3_anomalias, t3_performance, t3_bcb, t3_world_bank, t3_acoes_cambio, t3_fraude, t9_scd] >> t8_lakehouse_monitoring
+    [t8_lakehouse_monitoring] >> t8b_uc_registro
+    [t8b_uc_registro] >> t4_observabilidade
 
 # Este DAG foi gerado automaticamente a partir de databricks.yml
 # Reflete as dependências do workflow pai pipeline_completo

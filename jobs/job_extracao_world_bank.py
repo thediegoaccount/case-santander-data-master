@@ -38,5 +38,5 @@ def main():
     info("job_extracao_world_bank", "World Bank gravado")
     info("job_extracao_world_bank", f"Duracao:    {(fim - inicio).total_seconds():.2f}s")
 
-
-main()
+if __name__ == "__main__":
+    main()

@@ -7,6 +7,7 @@ from datetime import datetime
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
+from src.config.tables import SCHEMA_GOLD, SCHEMA_SILVER
 
 
 def analisar_indicadores_bcb(spark: SparkSession) -> int:
@@ -20,7 +21,7 @@ def analisar_indicadores_bcb(spark: SparkSession) -> int:
     print("Analisando indicadores BCB...")
 
     # Ler dados Silver do BCB
-    df_bcb = spark.sql("SELECT * FROM case_santander.silver.bcb")
+    df_bcb = spark.sql(f"SELECT * FROM {SCHEMA_SILVER}.bcb")
 
     # Pivot para ter cada indicador em uma coluna
     # fmt: off
@@ -34,6 +35,7 @@ def analisar_indicadores_bcb(spark: SparkSession) -> int:
     # Calcular indicadores técnicos (SMA 7d, volatilidade, mudança)
     window_7d = Window.orderBy("data").rangeBetween(-7 * 86400, 0)
     window_30d = Window.orderBy("data").rangeBetween(-30 * 86400, 0)
+    window_12m = Window.orderBy("data").rangeBetween(-365 * 86400, 0)
 
     # fmt: off
     df_analise = df_pivot \
@@ -48,7 +50,7 @@ def analisar_indicadores_bcb(spark: SparkSession) -> int:
                 (F.col("cambio_usd_brl") - F.col("cambio_media_7d")) /
                 F.col("cambio_media_7d") * 100, 2)) \
         .withColumn("ipca_acumulado_12m",
-            F.sum("ipca").over(window_30d * 12)) \
+            F.sum("ipca").over(window_12m)) \
         .withColumn("tendencia_selic",
             F.when(F.col("selic") > F.col("selic_media_7d"), "Alta")
             .when(F.col("selic") < F.col("selic_media_7d"), "Queda")
@@ -66,7 +68,7 @@ def analisar_indicadores_bcb(spark: SparkSession) -> int:
 
     # Gravar Gold
     df_analise.write.format("delta").mode("overwrite").option("mergeSchema", "true").saveAsTable(
-        "case_santander.gold.indicadores_bcb"
+        f"{SCHEMA_GOLD}.indicadores_bcb"
     )
 
     print("Gold indicadores_bcb gravado")

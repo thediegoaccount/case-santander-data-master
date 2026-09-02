@@ -23,3 +23,9 @@ variable "tags" {
   description = "Tags for resources"
   type        = map(string)
 }
+
+variable "data_contributor_principal_ids" {
+  description = "Object IDs que recebem Storage Blob Data Contributor na conta (SP dos jobs, Access Connector do Unity Catalog)"
+  type        = map(string)
+  default     = {}
+}

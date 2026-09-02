@@ -15,6 +15,8 @@ from databricks.sdk.runtime import dbutils
 from src.config.secrets import get_secret
 
 from src.config.settings import configure_adls
+from src.config.tables import register_external_table
+from src.config.tables import SCHEMA_BRONZE, SCHEMA_GOLD, SCHEMA_SILVER
 
 
 def main():
@@ -31,9 +33,9 @@ def main():
     configure_adls(spark, storage_account, client_id, tenant_id, client_secret)
     spark.sql("SET spark.databricks.delta.schema.autoMerge.enabled = true")
 
-    spark.sql("CREATE SCHEMA IF NOT EXISTS case_santander.bronze")
-    spark.sql("CREATE SCHEMA IF NOT EXISTS case_santander.silver")
-    spark.sql("CREATE SCHEMA IF NOT EXISTS case_santander.gold")
+    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA_BRONZE}")
+    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA_SILVER}")
+    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA_GOLD}")
     info("job_unity_catalog", " Schemas verificados!")
 
     # Tabelas Bronze em formato Parquet
@@ -54,7 +56,9 @@ def main():
 
     for tabela, path in tabelas_bronze_parquet.items():
         try:
-            spark.sql(f"DROP TABLE IF EXISTS case_santander.bronze.{tabela}")
+            # Sem DROP: mode("overwrite") ja substitui os dados, e o DROP
+            # apagava o delta.enableChangeDataFeed habilitado adiante neste
+            # mesmo job.
             if tabela in {"bcb", "world_bank"}:
                 df = spark.read.option("basePath", path).format("parquet").load(f"{path}extracao=*/")
             else:
@@ -64,11 +68,11 @@ def main():
                 .format("delta") \
                 .mode("overwrite") \
                 .option("mergeSchema", "true") \
-                .saveAsTable(f"case_santander.bronze.{tabela}")
+                .saveAsTable(f"{SCHEMA_BRONZE}.{tabela}")
             # fmt: on
-            info("job_unity_catalog", f"   case_santander.bronze.{tabela} gravado")
+            info("job_unity_catalog", f"   {SCHEMA_BRONZE}.{tabela} gravado")
         except Exception as e:
-            info("job_unity_catalog", f"   case_santander.bronze.{tabela} → {e}")
+            info("job_unity_catalog", f"   {SCHEMA_BRONZE}.{tabela} → {e}")
 
     # for tabela, path in tabelas_bronze_delta.items():
     #    try:
@@ -90,28 +94,25 @@ def main():
     # como tabelas gerenciadas no Unity Catalog, sem leitura de paths ADLS aqui.
     # Tabelas Gold
 
+    # Apenas as gold gravadas em PATH precisam ser registradas aqui.
+    # acoes_vs_cambio saiu da lista: src/gold/correlacao_acoes_cambio.py
+    # grava via saveAsTable (tabela gerenciada, sem path). O bloco antigo
+    # fazia DROP TABLE e so entao tentava ler um path que ninguem escreve --
+    # o read falhava, o except engolia, e a tabela do dia anterior ficava
+    # destruida ate t3_acoes_cambio rodar no fim do pipeline.
     # fmt: off
     tabelas_gold = {
         "performance_acoes": f"abfss://gold@{storage_account}.dfs.core.windows.net/performance_acoes/",
         "anomalias":         f"abfss://gold@{storage_account}.dfs.core.windows.net/anomalias/",
-        "acoes_vs_cambio":   f"abfss://gold@{storage_account}.dfs.core.windows.net/acoes_vs_cambio/",
     }
     # fmt: on
 
     for tabela, path in tabelas_gold.items():
-        try:
-            spark.sql(f"DROP TABLE IF EXISTS case_santander.gold.{tabela}")
-            df = spark.read.format("delta").load(path)
-            # fmt: off
-            df.write \
-                .format("delta") \
-                .mode("overwrite") \
-                .option("mergeSchema", "true") \
-                .saveAsTable(f"case_santander.gold.{tabela}")
-            # fmt: on
-            info("job_unity_catalog", f"   case_santander.gold.{tabela} gravado")
-        except Exception as e:
-            info("job_unity_catalog", f"   case_santander.gold.{tabela} → {e}")
+        # Sem DROP: registra como tabela externa sobre o path, preservando
+        # as propriedades da tabela (inclusive delta.enableChangeDataFeed).
+        register_external_table(spark, "gold", tabela, path)
+        info("job_unity_catalog", f"   {SCHEMA_GOLD}.{tabela} registrado")
+
 
     # Liquid Clustering: substitui particionamento estático por clustering
     # dinâmico — o Databricks decide o layout ideal dos arquivos por coluna,
@@ -119,13 +120,13 @@ def main():
     info("job_unity_catalog", "\nAplicando Liquid Clustering...")
     # fmt: off
     tabelas_liquid = {
-        "case_santander.silver.acoes":              "ticker, ano, mes",
-        "case_santander.silver.ordens":             "hash_cliente, ticker",
-        "case_santander.silver.clientes":           "hash_cliente, perfil_risco",
-        "case_santander.gold.anomalias":            "ticker, data_processamento",
-        "case_santander.gold.performance_acoes":    "ticker, ano",
-        "case_santander.gold.deteccao_fraude":      "score_fraude, data_processamento",
-        "case_santander.gold.score_risco_clientes": "categoria_risco, hash_cliente",
+        f"{SCHEMA_SILVER}.acoes":              "ticker, ano, mes",
+        f"{SCHEMA_SILVER}.ordens":             "hash_cliente, ticker",
+        f"{SCHEMA_SILVER}.clientes":           "hash_cliente, perfil_risco",
+        f"{SCHEMA_GOLD}.anomalias":            "ticker, data_processamento",
+        f"{SCHEMA_GOLD}.performance_acoes":    "ticker, ano",
+        f"{SCHEMA_GOLD}.deteccao_fraude":      "score_fraude, data_processamento",
+        f"{SCHEMA_GOLD}.score_risco_clientes": "categoria_risco, hash_cliente",
     }
     # fmt: on
 
@@ -141,9 +142,9 @@ def main():
     # Permite leitura incremental por versão ou timestamp nos jobs Gold.
     info("job_unity_catalog", "\nHabilitando Delta Change Data Feed (CDC)...")
     tabelas_cdf = [
-        "case_santander.silver.streaming",
-        "case_santander.silver.ordens",
-        "case_santander.silver.clientes",
+        f"{SCHEMA_SILVER}.streaming",
+        f"{SCHEMA_SILVER}.ordens",
+        f"{SCHEMA_SILVER}.clientes",
     ]
 
     for tabela in tabelas_cdf:

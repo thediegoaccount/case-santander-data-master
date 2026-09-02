@@ -5,5 +5,10 @@ output "catalog_name" {
 
 output "metastore_id" {
   description = "Metastore ID"
-  value       = databricks_metastore.this.id
+  value       = local.metastore_id
+}
+
+output "schemas" {
+  description = "Schemas criados no catalog"
+  value       = [for s in databricks_schema.layers : s.name]
 }

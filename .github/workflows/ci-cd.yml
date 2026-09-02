@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  PYTHON_VERSION: '3.9'
+  PYTHON_VERSION: '3.11'
   TERRAFORM_VERSION: '1.5'
 
 jobs:
@@ -30,7 +30,10 @@ jobs:
       
       - name: Install dependencies
         run: |
-          pip install pytest pytest-spark pandas pyspark pyyaml
+          # requirements.txt e a fonte da verdade das dependencias do projeto.
+          # Uma lista manual aqui ja divergiu antes (faltava requests, usado
+          # por src/utils/retry.py) e quebrou os testes silenciosamente.
+          pip install -r requirements.txt
       
       - name: Run lint
         run: |
@@ -43,12 +46,12 @@ jobs:
       
       - name: Run data quality tests
         run: |
-          pytest tests/test_data_quality.py -v
+          pytest tests/ -v
       
       - name: Check syntax
         run: |
           python -m py_compile jobs/*.py
-          python -m py_compile src/**/*.py
+          python -m compileall -q src/ jobs/ dags/ config/
   
   # ========================================
   # BUILD E TESTE DE AMBIENTE HK
@@ -72,8 +75,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       
       - name: Install Databricks CLI
-        run: |
-          pip install databricks-cli
+        uses: databricks/setup-cli@main
       
       - name: Configure Databricks CLI (HK)
         env:
@@ -84,14 +86,14 @@ jobs:
       
       - name: Validate Databricks Bundle (HK)
         run: |
-          databricks bundle validate -e hk
+          databricks bundle validate -t hk
       
       - name: Deploy to HK
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST_HK }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_HK }}
         run: |
-          databricks bundle deploy -e hk --force
+          databricks bundle deploy -t hk --force
   
   # ========================================
   # BUILD E TESTE DE AMBIENTE PROD
@@ -115,8 +117,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       
       - name: Install Databricks CLI
-        run: |
-          pip install databricks-cli
+        uses: databricks/setup-cli@main
       
       - name: Configure Databricks CLI (PROD)
         env:
@@ -127,14 +128,14 @@ jobs:
       
       - name: Validate Databricks Bundle (PROD)
         run: |
-          databricks bundle validate -e prod
+          databricks bundle validate -t prod
       
       - name: Deploy to PROD
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST_PROD }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_PROD }}
         run: |
-          databricks bundle deploy -e prod --force
+          databricks bundle deploy -t prod --force
   
   # ========================================
   # ATUALIZAÇÃO AUTOMÁTICA DO AIRFLOW DAG
@@ -201,7 +202,7 @@ jobs:
       - name: Terraform Init (HK)
         run: |
           cd terraform
-          terraform init
+          terraform init -backend-config="key=case-santander-data-hk.tfstate"
       
       - name: Terraform Plan (HK)
         run: |
@@ -238,7 +239,7 @@ jobs:
       - name: Terraform Init (PROD)
         run: |
           cd terraform
-          terraform init
+          terraform init -backend-config="key=case-santander-data-prod.tfstate"
       
       - name: Terraform Plan (PROD)
         run: |

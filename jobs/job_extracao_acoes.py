@@ -38,5 +38,5 @@ def main():
     info("job_extracao_acoes", "Acoes gravadas")
     info("job_extracao_acoes", f"Duracao:    {(fim - inicio).total_seconds():.2f}s")
 
-
-main()
+if __name__ == "__main__":
+    main()

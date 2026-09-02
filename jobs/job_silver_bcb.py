@@ -38,5 +38,5 @@ def main():
     info("job_silver_bcb", f"BCB:        {total_bcb} registros")
     info("job_silver_bcb", f"Duracao:    {(fim - inicio).total_seconds():.2f}s")
 
-
-main()
+if __name__ == "__main__":
+    main()

@@ -30,5 +30,5 @@ def main():
     info("job_scd", f"Score Risco SCD: {total_score} registros ativos")
     info("job_scd", f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
-
-main()
+if __name__ == "__main__":
+    main()

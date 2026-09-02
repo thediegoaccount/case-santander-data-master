@@ -3,10 +3,10 @@ Job: Gold BCB Indicadores
 Analisa Selic, Câmbio USD/BRL e IPCA do Banco Central.
 
 Depende de:
-  - case_santander.silver.bcb
+  - <catalog>.<env>_silver.bcb
 
 Produz:
-  - case_santander.gold.indicadores_bcb
+  - <catalog>.<env>_gold.indicadores_bcb
 
 Ou via Databricks Workflow:
     Task: t3_gold_bcb
@@ -26,6 +26,7 @@ from src.config.secrets import get_secret
 
 from src.config.settings import configure_adls
 from src.gold.bcb_analise import analisar_indicadores_bcb
+from src.config.tables import SCHEMA_GOLD, SCHEMA_SILVER
 
 
 def main():
@@ -47,5 +48,5 @@ def main():
     info("job_gold_bcb", "\n=== JOB GOLD BCB CONCLUIDO ===")
     info("job_gold_bcb", f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
-
-main()
+if __name__ == "__main__":
+    main()

@@ -4,8 +4,12 @@ Secrets Helper - Recuperação Dinâmica de Secrets
 Centraliza recuperação de secrets do Key Vault usando configuração dinâmica do ambiente.
 """
 
-from databricks.sdk.runtime import dbutils
 from .environment import get_config
+
+# dbutils so existe dentro do Databricks. O import ficava no topo do modulo,
+# o que fazia qualquer importador transitivo (ex: src/security/hashing.py)
+# quebrar fora do runtime -- inclusive nos testes. Agora e resolvido na
+# chamada, nao no import.
 
 
 def get_secret(key: str):
@@ -25,6 +29,8 @@ def get_secret(key: str):
         client_id = get_secret("client-id")
         storage_account = get_secret("storage-account")
     """
+    from databricks.sdk.runtime import dbutils
+
     config = get_config()
     key_vault = config["key_vault"]
 

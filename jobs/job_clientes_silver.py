@@ -16,6 +16,7 @@ from src.config.secrets import get_secret
 from pyspark.sql import functions as F
 
 from src.config.settings import configure_adls
+from src.config.tables import SCHEMA_BRONZE, SCHEMA_SILVER
 
 
 def main():
@@ -34,7 +35,7 @@ def main():
     data_hoje = datetime.now().strftime("%Y-%m-%d")
 
     info("job_clientes_silver", "Transformando Bronze Clientes para Silver...")
-    df_clientes_silver = spark.sql("SELECT * FROM case_santander.bronze.clientes") \
+    df_clientes_silver = spark.sql(f"SELECT * FROM {SCHEMA_BRONZE}.clientes") \
         .withColumn("faixa_etaria",
             F.when(F.col("idade") < 30, "Jovem")
             .when(F.col("idade") < 50, "Adulto")
@@ -48,12 +49,12 @@ def main():
 
     df_clientes_silver.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.silver.clientes")
+        .saveAsTable(f"{SCHEMA_SILVER}.clientes")
 
     info("job_clientes_silver", " silver.clientes gravado")
 
     info("job_clientes_silver", "Transformando Bronze Ordens para Silver...")
-    df_ordens_silver = spark.sql("SELECT * FROM case_santander.bronze.ordens") \
+    df_ordens_silver = spark.sql(f"SELECT * FROM {SCHEMA_BRONZE}.ordens") \
         .withColumn("data_ordem", F.to_date("data_ordem")) \
         .withColumn("ano", F.year("data_ordem")) \
         .withColumn("mes", F.month("data_ordem")) \
@@ -61,7 +62,7 @@ def main():
 
     df_ordens_silver.write.format("delta").mode("overwrite") \
         .option("mergeSchema", "true") \
-        .saveAsTable("case_santander.silver.ordens")
+        .saveAsTable(f"{SCHEMA_SILVER}.ordens")
 
     info("job_clientes_silver", " silver.ordens gravado")
 
@@ -69,5 +70,5 @@ def main():
     info("job_clientes_silver", "\n=== JOB CLIENTES_SILVER CONCLUIDO ===")
     info("job_clientes_silver", f"Duracao: {(fim - inicio).total_seconds():.2f}s")
 
-
-main()
+if __name__ == "__main__":
+    main()

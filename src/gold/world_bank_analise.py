@@ -7,6 +7,7 @@ from datetime import datetime
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
+from src.config.tables import SCHEMA_GOLD, SCHEMA_SILVER
 
 
 def analisar_contexto_macro(spark: SparkSession) -> int:
@@ -20,7 +21,7 @@ def analisar_contexto_macro(spark: SparkSession) -> int:
     print("Analisando contexto macroeconômico...")
 
     # Ler dados Silver do World Bank
-    df_wb = spark.sql("SELECT * FROM case_santander.silver.world_bank")
+    df_wb = spark.sql(f"SELECT * FROM {SCHEMA_SILVER}.world_bank")
 
     # Pivot para ter cada indicador em uma coluna
     # fmt: off
@@ -90,7 +91,7 @@ def analisar_contexto_macro(spark: SparkSession) -> int:
 
     # Gravar Gold
     df_analise.write.format("delta").mode("overwrite").option("mergeSchema", "true").saveAsTable(
-        "case_santander.gold.contexto_macroeonomico"
+        f"{SCHEMA_GOLD}.contexto_macroeconomico"
     )
 
     print("Gold contexto_macroeconomico gravado")

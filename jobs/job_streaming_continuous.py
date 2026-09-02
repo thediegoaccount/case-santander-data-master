@@ -28,6 +28,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType
 
 from src.config.settings import configure_adls
+from src.config.tables import SCHEMA_SILVER
 
 
 def main():
@@ -71,11 +72,17 @@ def main():
     # Auto Loader - NÃO limpa checkpoint (mantém estado)
     df_stream = spark.readStream \
         .format("cloudFiles") \
-        .option("cloudFiles.format", "parquet") \
+        .option("cloudFiles.format", "avro") \
         .option("cloudFiles.schemaLocation", checkpoint_path + "/schema") \
         .option("cloudFiles.maxFilesPerTrigger", 1) \
-        .schema(schema_transacao) \
         .load(bronze_kafka_path)
+
+    # Event Hub Capture grava Avro com envelope
+    # {SequenceNumber, Offset, EnqueuedTimeUtc, SystemProperties, Properties,
+    # Body}. O payload JSON original vem em Body, como bytes.
+    df_stream = df_stream.select(
+        F.from_json(F.col("Body").cast("string"), schema_transacao).alias("t")
+    ).select("t.*")
 
     # Transformações
     df_processado = df_stream \
@@ -102,7 +109,8 @@ def main():
         .option("mergeSchema", "true") \
         .queryName("streaming_continuous_query") \
         .trigger(processingTime='1 minute') \
-        .start(silver_streaming_path)
+        .option("path", silver_streaming_path) \
+        .toTable(f"{SCHEMA_SILVER}.streaming")
 
     info("job_streaming_continuous", "Streaming contínuo iniciado")
     info("job_streaming_continuous", f"Aguardando atualizações... (latencia: ~1 minuto)")
