@@ -240,8 +240,13 @@ with DAG(
             wheel_task = task.get('python_wheel_task', {})
             entry_point = wheel_task.get('entry_point', '')
             
-            # Mapear task_key para job_path
-            job_path = self._map_task_to_job_path(task_key)
+            # job_path vem do proprio entry_point, nao de um mapeamento
+            # separado. O mapeamento hardcoded (_map_task_to_job_path) tinha
+            # duas falhas: ignorava o valor real de entry_point (uma task
+            # cujo entry_point mudasse no databricks.yml continuava apontando
+            # para o job antigo) e nao conhecia task_keys novas -- uma task
+            # adicionada ao bundle desaparecia do DAG em silencio, sem erro.
+            job_path = f"jobs/{entry_point}.py" if entry_point else ""
             
             if job_path:
                 code += f'''
@@ -254,33 +259,6 @@ with DAG(
         
         return code
     
-    def _map_task_to_job_path(self, task_key: str) -> str:
-        """Mapeia task_key do workflow para path do job"""
-        mapping = {
-            't0_unity_catalog': 'jobs/job_unity_catalog.py',
-            't1_extracao_acoes': 'jobs/job_extracao_acoes.py',
-            't1_extracao_bcb': 'jobs/job_extracao_bcb.py',
-            't1_extracao_world_bank': 'jobs/job_extracao_world_bank.py',
-            't5_streaming': 'jobs/job_streaming.py',
-            't6_clientes_ordens': 'jobs/job_clientes_ordens.py',
-            't2_silver_acoes': 'jobs/job_silver_acoes.py',
-            't2_silver_bcb': 'jobs/job_silver_bcb.py',
-            't2_silver_world_bank': 'jobs/job_silver_world_bank.py',
-            't6_clientes_silver': 'jobs/job_clientes_silver.py',
-            't3_anomalias': 'jobs/job_gold_anomalias.py',
-            't3_performance': 'jobs/job_gold_performance.py',
-            't3_bcb': 'jobs/job_gold_bcb.py',
-            't3_world_bank': 'jobs/job_gold_world_bank.py',
-            't3_acoes_cambio': 'jobs/job_gold_acoes_vs_cambio.py',
-            't7_corretora_analises': 'jobs/job_corretora_analises.py',
-            't9_scd': 'jobs/job_scd.py',
-            't3_fraude': 'jobs/job_gold_fraude.py',
-            't10_streaming_gold': 'jobs/job_streaming_to_gold.py',
-            't8_lakehouse_monitoring': 'jobs/job_lakehouse_monitoring.py',
-            't4_observabilidade': 'jobs/job_observabilidade.py',
-        }
-        
-        return mapping.get(task_key, '')
     
     def _generate_dependencies_from_workflow(self, workflow: Dict) -> str:
         """Gera código de dependências baseado no workflow pai"""

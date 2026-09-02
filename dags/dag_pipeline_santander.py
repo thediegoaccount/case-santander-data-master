@@ -50,7 +50,7 @@ with DAG(
     tags=["santander", "databricks", "financeiro", "synced", ENVIRONMENT],
 ) as dag:
 
-    # Setup Unity Catalog e schemas
+    # Cria os schemas do Unity Catalog (sem dependencia de dado)
     t0_unity_catalog = databricks_task(
         task_id="t0_unity_catalog",
         job_path="jobs/job_unity_catalog_schemas.py"
@@ -97,8 +97,6 @@ with DAG(
         task_id="t2_silver_world_bank",
         job_path="jobs/job_silver_world_bank.py"
     )
-
-    # Transformação Silver Clientes
 
     # Gold Anomalias
     t3_anomalias = databricks_task(
@@ -154,7 +152,7 @@ with DAG(
         job_path="jobs/job_lakehouse_monitoring.py"
     )
 
-    # Registro das tabelas no Unity Catalog (depois dos produtores)
+    # Registra tabelas bronze/gold no Unity Catalog e aplica clustering/CDF
     t8b_uc_registro = databricks_task(
         task_id="t8b_uc_registro",
         job_path="jobs/job_unity_catalog.py"
@@ -182,8 +180,7 @@ with DAG(
     [t6_clientes_ordens] >> t7_corretora_analises
     [t7_corretora_analises] >> t9_scd
     [t7_corretora_analises] >> t3_fraude
-    [t3_anomalias, t3_performance, t3_bcb, t3_world_bank,
-     t3_acoes_cambio, t3_fraude, t9_scd] >> t8_lakehouse_monitoring
+    [t3_anomalias, t3_performance, t3_bcb, t3_world_bank, t3_acoes_cambio, t3_fraude, t9_scd] >> t8_lakehouse_monitoring
     [t8_lakehouse_monitoring] >> t8b_uc_registro
     [t8b_uc_registro] >> t4_observabilidade
 
