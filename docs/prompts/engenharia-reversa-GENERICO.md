@@ -162,10 +162,25 @@ Entregue INVENTARIO.md com:
    Para cada: repo/arquivo:linha e o que liga a o quê.
 
 6. INVENTÁRIO DE CAMPOS FINAIS  (insumo da Fase V)
-   Liste TODOS os campos de TODAS as tabelas finais (as que são consumidas
-   por fora: BI, API, cliente, outro sistema). Só a lista de nomes, sem regra —
-   a regra é trabalho de A2/A3. Esta lista é o denominador da varredura: a
-   Fase V vai exigir regra completa para cada um destes campos.
+
+   DEFINA "TABELA FINAL" ANTES DE CONTAR, e escreva o critério no documento.
+   Este número é o denominador da Fase V, que exige 100% de cobertura — se o
+   critério variar, "aprovado" deixa de ser reproduzível. Duas execuções deste
+   pacote no mesmo projeto já divergiram em 42 campos por causa disto.
+
+   Aplique nesta ordem e pare no primeiro que responder:
+   a) Existe consumidor externo identificável (BI, API, export, outro sistema)?
+      Então tabela final = exatamente as que ele consome. Cite onde comprovou.
+   b) Não existe consumidor externo no código? Então tabela final = toda tabela
+      da CAMADA MAIS ALTA da arquitetura (gold/mart/serving), MAIS qualquer
+      tabela de outra camada que nenhum job do projeto leia — se ninguém
+      consome internamente, ou é saída externa ou é órfã, e os dois casos
+      precisam de documentação.
+   c) Não há camadas? Então toda tabela persistida que não seja intermediária
+      descartável.
+
+   Liste os campos de cada tabela final. Só nomes, sem regra — a regra é
+   trabalho de A2/A3. Declare o total e o critério usado, lado a lado.
 
 7. VALIDAÇÃO DO INVENTÁRIO (passo crítico — não pule)
    Para cada contagem, verifique item a item e SEPARE:

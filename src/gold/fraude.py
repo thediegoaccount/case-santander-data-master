@@ -6,6 +6,7 @@ from datetime import datetime
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+from src.config.logging import info, warning
 from src.config.tables import SCHEMA_GOLD, SCHEMA_SILVER
 
 
@@ -26,21 +27,33 @@ def detectar_fraude(spark: SparkSession) -> int:
         FROM {SCHEMA_GOLD}.score_risco_clientes
     """)
 
-    # Validate broadcast size: df_score pode crescer com SCD Type-2
-    # Fallback para sort-merge join se > 2GB
-    max_broadcast_bytes = 2_000_000_000  # 2GB default threshold
+    # Decide entre broadcast e sort-merge pelo tamanho de df_score, que cresce
+    # com o SCD Type-2.
+    #
+    # A estimativa anterior era código morto: montava o nome da tabela a
+    # partir de um RDD vazio via API privada do SparkContext, lendo um
+    # atributo que DataFrame não possui, e o próprio RDD vazio sem schema
+    # também falha na conversão. Levantava
+    # AttributeError em toda execução, o `except` engolia, `use_broadcast`
+    # ficava sempre True e o ramo sort-merge abaixo era inalcançável. Ou seja:
+    # a proteção contra df_score grande nunca existiu.
+    #
+    # Trocado por contagem de linhas, que no Delta sai dos metadados e é
+    # barata. score_risco_clientes tem uma linha por cliente, então o limiar
+    # em linhas é mais legível que em bytes para quem for ajustar.
+    MAX_LINHAS_BROADCAST = 5_000_000
 
     try:
-        # Estimate size sem materializar
-        df_score_size = spark.sql(f"""
-            SELECT SUM(LENGTH(CAST(struct(*) AS STRING))) as total_bytes
-            FROM {df_score._sc.parallelize([]).toDF().name}
-        """).collect()[0][0] or 0
-
-        use_broadcast = (df_score_size < max_broadcast_bytes) if df_score_size else True
-    except Exception:
-        # Se erro na estimativa, usa broadcast conservativamente
-        use_broadcast = True
+        total_linhas = df_score.count()
+        use_broadcast = total_linhas < MAX_LINHAS_BROADCAST
+        info("gold_fraude", f"df_score: {total_linhas} linhas, "
+                            f"broadcast={use_broadcast}")
+    except Exception as e:
+        # Sem a contagem não dá para decidir; sort-merge funciona em qualquer
+        # tamanho, então é o fallback seguro (broadcast de tabela grande
+        # estoura o driver).
+        use_broadcast = False
+        warning("gold_fraude", f"Falha ao medir df_score, usando sort-merge: {e}")
 
     if use_broadcast:
         df_join = df_ordens.join(
