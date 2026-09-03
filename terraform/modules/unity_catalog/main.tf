@@ -57,6 +57,10 @@ resource "databricks_catalog" "this" {
 
   name         = var.catalog_name
   metastore_id = local.metastore_id
+  # Sem isto, destroy falha se o pipeline ja tiver rodado e o catalog
+  # contiver schemas/tabelas: Unity Catalog recusa apagar catalog nao
+  # vazio. Necessario para ciclos automatizados de subir/testar/derrubar.
+  force_destroy = true
 }
 
 # Schemas por ambiente: hk_bronze / prod_bronze, etc.
@@ -68,4 +72,7 @@ resource "databricks_schema" "layers" {
   catalog_name = databricks_catalog.this.name
   name         = "${var.schema_prefix}${each.key}"
   comment      = "${title(each.key)} layer - ${var.environment}"
+  # Mesmo motivo do catalog: sem isto, destroy falha se os jobs ja tiverem
+  # gravado tabelas dentro do schema.
+  force_destroy = true
 }

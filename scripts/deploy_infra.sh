@@ -13,6 +13,8 @@
 #   ./scripts/deploy_infra.sh stage2      # secret scope, unity catalog
 #   ./scripts/deploy_infra.sh all         # stage1 + stage2, com host automatico
 #
+# Para derrubar tudo: scripts/destroy_infra.sh (mesma variavel ENVIRONMENT).
+#
 # O ambiente vem da variavel ENVIRONMENT (default: hk) e define o state key:
 #   ENVIRONMENT=prod ./scripts/deploy_infra.sh all -var-file=terraform/environments/prod.tfvars
 

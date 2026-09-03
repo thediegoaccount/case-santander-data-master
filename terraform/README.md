@@ -153,13 +153,38 @@ assignment ao workspace.
 
 ## Destruição
 
-```bash
-# Destruir HK
-terraform destroy -var-file=environments/hk.tfvars
+`terraform destroy` sozinho **não** funciona aqui: o provider `databricks`
+exige `databricks_host`, que é uma variável sem default, e o backend usa uma
+`key` por ambiente (ver Deploy). Use o script, que resolve as duas coisas
+automaticamente a partir do próprio state:
 
-# Destruir PROD
-terraform destroy -var-file=environments/prod.tfvars
+```bash
+./scripts/destroy_infra.sh all
+ENVIRONMENT=prod ./scripts/destroy_infra.sh all -var-file=terraform/environments/prod.tfvars
+
+# sem confirmação interativa (CI):
+./scripts/destroy_infra.sh all -auto-approve
 ```
+
+Um único `terraform destroy` cobre tudo — Terraform computa a ordem reversa
+de dependência a partir do state, não precisa das duas etapas do apply. Isso
+inclui o Unity Catalog (`force_destroy = true` no catalog e nos schemas,
+então funciona mesmo que o pipeline já tenha gravado tabelas) e o Key Vault
+(o provider `azurerm` purga de verdade por padrão — `features {}` vazio já
+ativa `purge_soft_delete_on_destroy`, então recriar com o mesmo nome depois
+não esbarra em "vault soft-deleted").
+
+**Metastore compartilhado entre ambientes**: o Azure permite um metastore
+Unity Catalog por região/account. Se um segundo ambiente aponta para o
+metastore deste via `existing_metastore_id`, destruir este ambiente destrói
+o metastore de que o outro depende — são estados diferentes, Terraform não
+enxerga essa dependência. Nesse caso, destrua primeiro quem usa
+`existing_metastore_id`, por último quem criou o metastore.
+
+O backend do state (`terraform/bootstrap/`) não é afetado por nada acima —
+ele existe para sobreviver a vários ciclos de subir/derrubar. Só destrua com
+`./scripts/destroy_infra.sh bootstrap` se quiser apagar o histórico de todos
+os ambientes.
 
 ## Outputs
 
