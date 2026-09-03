@@ -174,9 +174,46 @@ Entregue INVENTARIO.md com:
      teste, geração de config, homônimo de outro domínio)
    O contrato leva o número de itens REAIS. Explicite os dois números.
 
+   SETE PADRÕES QUE CEGAM VARREDURA POR REGEX. Todos observados em uso real;
+   os cinco últimos custaram uma correção cada. Verifique um a um e diga
+   quantos falsos positivos/negativos achou em cada:
+
+   FALSO POSITIVO (o grep acha, mas não é uso real)
+   a) Nome dentro de DOCSTRING ou comentário. Pior caso: o docstring de um
+      módulo utilitário que TODO mundo importa — o exemplo vira "dependência"
+      de todo job do projeto.
+   b) Chamada homônima de outra biblioteca. `", ".join(...)` é `str.join` do
+      Python, não join de DataFrame. `.merge()` de pandas não é MERGE Delta.
+   c) Dois ramos da MESMA operação contados como duas.
+      `if X: df.join(a, broadcast) else: df.join(a)` é UM join lógico.
+
+   FALSO NEGATIVO (existe, mas o grep não acha) — mais perigoso, porque
+   silenciosamente vira "artefato sem produtor" e você reporta uma quebra
+   de pipeline que não existe:
+   d) Nome montado por variável de loop: f"{SCHEMA}.{tabela}" dentro de for.
+   e) FQN atribuído a variável antes do write:
+      tab = f"{SCHEMA}.clientes" ... .saveAsTable(tab)
+   f) FQN passado como ARGUMENTO a helper genérico que escreve:
+      merge_ou_cria(spark, df, f"{SCHEMA}.clientes", chave)
+      Centralizar o write num helper melhora o código e cega a análise —
+      mapeie os helpers de escrita do projeto ANTES de contar.
+   g) Parênteses aninhados antes do FQN no argumento:
+      helper(spark, spark.createDataFrame(df), f"{SCHEMA}.x", ...)
+      Regex com [^)]* para de casar no primeiro ")" e perde o FQN.
+
+   Regra prática: se um artefato aparecer como "lido mas sem produtor",
+   suspeite do SEU regex antes de concluir que o pipeline está quebrado.
+   Confirme abrindo o arquivo.
+
 8. COMANDOS DE REGENERAÇÃO
    Os comandos exatos que reproduzem cada contagem, para refazer o inventário
    quando o código mudar.
+   EXECUTE cada comando e confira que o resultado bate com o número que você
+   declarou. Um comando que não reproduz o próprio número declarado é pior
+   que nenhum comando: quem regenerar vai concluir que o inventário está
+   desatualizado quando não está. Se o comando tiver falso negativo
+   inevitável (padrões d–g acima), declare-o junto do comando e forneça a
+   varredura complementar.
 
 9. ZONAS DE RISCO
    O que não conseguiu determinar e por quê; código sem uso aparente;
