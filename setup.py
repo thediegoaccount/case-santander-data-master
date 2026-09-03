@@ -24,8 +24,10 @@ setup(
     # e o job falha ao carregar.
     entry_points={
         "console_scripts": [
-            "job_clientes_ordens = jobs.job_clientes_ordens:main",
-            "job_clientes_silver = jobs.job_clientes_silver:main",
+            "job_bronze_clientes = jobs.job_bronze_clientes:main",
+            "job_bronze_ordens = jobs.job_bronze_ordens:main",
+            "job_silver_clientes = jobs.job_silver_clientes:main",
+            "job_silver_ordens = jobs.job_silver_ordens:main",
             "job_corretora_analises = jobs.job_corretora_analises:main",
             "job_extracao_acoes = jobs.job_extracao_acoes:main",
             "job_extracao_bcb = jobs.job_extracao_bcb:main",

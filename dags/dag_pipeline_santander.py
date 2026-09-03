@@ -74,10 +74,28 @@ with DAG(
         job_path="jobs/job_extracao_world_bank.py"
     )
 
-    # Clientes e Ordens Kaggle
-    t6_clientes_ordens = databricks_task(
-        task_id="t6_clientes_ordens",
-        job_path="jobs/job_clientes_ordens.py"
+    # Bronze Clientes (Kaggle) - carga isolada de bronze.clientes
+    t6_bronze_clientes = databricks_task(
+        task_id="t6_bronze_clientes",
+        job_path="jobs/job_bronze_clientes.py"
+    )
+
+    # Bronze Ordens simuladas - carga isolada de bronze.ordens
+    t6_bronze_ordens = databricks_task(
+        task_id="t6_bronze_ordens",
+        job_path="jobs/job_bronze_ordens.py"
+    )
+
+    # Silver Clientes - carga isolada de silver.clientes
+    t6_silver_clientes = databricks_task(
+        task_id="t6_silver_clientes",
+        job_path="jobs/job_silver_clientes.py"
+    )
+
+    # Silver Ordens - carga isolada de silver.ordens
+    t6_silver_ordens = databricks_task(
+        task_id="t6_silver_ordens",
+        job_path="jobs/job_silver_ordens.py"
     )
 
     # Transformação Silver Ações
@@ -168,7 +186,10 @@ with DAG(
     [t0_unity_catalog] >> t1_extracao_acoes
     [t0_unity_catalog] >> t1_extracao_bcb
     [t0_unity_catalog] >> t1_extracao_world_bank
-    [t0_unity_catalog] >> t6_clientes_ordens
+    [t0_unity_catalog] >> t6_bronze_clientes
+    [t6_bronze_clientes] >> t6_bronze_ordens
+    [t6_bronze_clientes] >> t6_silver_clientes
+    [t6_bronze_ordens] >> t6_silver_ordens
     [t1_extracao_acoes] >> t2_silver_acoes
     [t1_extracao_bcb] >> t2_silver_bcb
     [t1_extracao_world_bank] >> t2_silver_world_bank
@@ -177,7 +198,7 @@ with DAG(
     [t2_silver_bcb] >> t3_bcb
     [t2_silver_world_bank] >> t3_world_bank
     [t2_silver_acoes, t2_silver_bcb] >> t3_acoes_cambio
-    [t6_clientes_ordens] >> t7_corretora_analises
+    [t6_silver_clientes, t6_silver_ordens] >> t7_corretora_analises
     [t7_corretora_analises] >> t9_scd
     [t7_corretora_analises] >> t3_fraude
     [t3_anomalias, t3_performance, t3_bcb, t3_world_bank, t3_acoes_cambio, t3_fraude, t9_scd] >> t8_lakehouse_monitoring

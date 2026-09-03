@@ -377,13 +377,79 @@ resources:
         timeout_seconds: 3600
         max_retries: 2
 
-      - task_key: t6_clientes_ordens
-        description: "Clientes e Ordens Kaggle"
+      - task_key: t6_bronze_clientes
+        description: "Bronze Clientes (Kaggle) - carga isolada de bronze.clientes"
         depends_on:
           - task_key: t0_unity_catalog
         python_wheel_task:
           package_name: case_santander
-          entry_point: job_clientes_ordens
+          entry_point: job_bronze_clientes
+        libraries:
+          - whl: ./dist/*.whl
+        new_cluster:
+          spark_env_vars:
+            ENVIRONMENT: "${var.environment}"
+          spark_version: ${var.spark_version}
+          node_type_id: "Standard_DS3_v2"
+          num_workers: ${var.gold_workers}
+          azure_attributes:
+            availability: "SPOT_WITH_FALLBACK_AZURE"
+            first_on_demand: 1
+        timeout_seconds: 3600
+        max_retries: 2
+
+      #  SILVER (Por Fonte) 
+      - task_key: t6_bronze_ordens
+        description: "Bronze Ordens simuladas - carga isolada de bronze.ordens"
+        depends_on:
+          - task_key: t6_bronze_clientes
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: job_bronze_ordens
+        libraries:
+          - whl: ./dist/*.whl
+        new_cluster:
+          spark_env_vars:
+            ENVIRONMENT: "${var.environment}"
+          spark_version: ${var.spark_version}
+          node_type_id: "Standard_DS3_v2"
+          num_workers: ${var.gold_workers}
+          azure_attributes:
+            availability: "SPOT_WITH_FALLBACK_AZURE"
+            first_on_demand: 1
+        timeout_seconds: 3600
+        max_retries: 2
+
+      #  SILVER (Por Fonte) 
+      - task_key: t6_silver_clientes
+        description: "Silver Clientes - carga isolada de silver.clientes"
+        depends_on:
+          - task_key: t6_bronze_clientes
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: job_silver_clientes
+        libraries:
+          - whl: ./dist/*.whl
+        new_cluster:
+          spark_env_vars:
+            ENVIRONMENT: "${var.environment}"
+          spark_version: ${var.spark_version}
+          node_type_id: "Standard_DS3_v2"
+          num_workers: ${var.gold_workers}
+          azure_attributes:
+            availability: "SPOT_WITH_FALLBACK_AZURE"
+            first_on_demand: 1
+        timeout_seconds: 3600
+        max_retries: 2
+
+      #  SILVER (Por Fonte) 
+      - task_key: t6_silver_ordens
+        description: "Silver Ordens - carga isolada de silver.ordens"
+        depends_on:
+          - task_key: t6_bronze_ordens
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: job_silver_ordens
         libraries:
           - whl: ./dist/*.whl
         new_cluster:
@@ -572,7 +638,8 @@ resources:
       - task_key: t7_corretora_analises
         description: "Corretora Análises"
         depends_on:
-          - task_key: t6_clientes_ordens
+          - task_key: t6_silver_clientes
+          - task_key: t6_silver_ordens
         python_wheel_task:
           package_name: case_santander
           entry_point: job_corretora_analises
