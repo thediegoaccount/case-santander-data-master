@@ -28,12 +28,20 @@ Extraído do código em 2026-09-02. **Regenere antes de usar** — se o número 
 o pacote está desatualizado:
 
 ```bash
-# Tabelas por camada
+# Tabelas por camada -- ATENCAO: falso negativo conhecido.
+# So acha literais: devolve 2 bronze, nao 6. As outras 4 (acoes, bcb,
+# world_bank, kafka) sao gravadas por variavel de loop em
+# jobs/job_unity_catalog.py:71 -- f"{SCHEMA_BRONZE}.{tabela}" -- e escapam
+# do grep. Complemente com a varredura de paths abaixo.
 grep -rhno "SCHEMA_\(BRONZE\|SILVER\|GOLD\)}\.[a-z_0-9]*" --include=*.py jobs/ src/ \
   | sed 's/^[0-9]*://' | sed 's/}\./ /' | sort -u
 
-# Joins reais
-grep -rn "\.join(\|JOIN " --include=*.py src/ jobs/ | grep -v "^\s*#"
+# Bronze gravadas por variavel: pega pelos paths ADLS
+grep -rhno "abfss://bronze@[^\"]*" --include=*.py src/ jobs/ \
+  | sed 's/.*net\///' | sed 's/[\/"].*//' | sort -u
+
+# Joins -- retorna 9; exclua os 2 falsos positivos descritos acima
+grep -rn "\.join(" --include=*.py src/ jobs/ | grep -v "^\s*#"
 ```
 
 **Cobertura mínima exigida — 30 tabelas:**
@@ -46,10 +54,27 @@ grep -rn "\.join(\|JOIN " --include=*.py src/ jobs/ | grep -v "^\s*#"
   `score_risco_scd`, `fraude_streaming`, `anomalias_intraday`, `volume_intraday`,
   `ranking_acoes_realtime`
 
-**Joins — 8 ocorrências em 4 módulos de dados**, distribuídas assim:
+**Joins — 7 joins de dado em 4 módulos**, distribuídos assim:
 
-| Arquivo | Joins |
+| Arquivo | Joins lógicos |
 |---|---|
+| `src/gold/streaming_gold.py` | 4 |
+| `src/gold/fraude.py` | 1 |
+| `src/gold/correlacao_acoes_cambio.py` | 1 |
+| `jobs/job_corretora_analises.py` | 1 |
+
+O grep bruto por `.join(` retorna **9 ocorrências**. Duas são falsos positivos e
+precisam ser excluídas — é assim que a contagem chega a 7:
+
+1. `src/pipeline/dynamic_pipeline.py:279` — é `", ".join(...)`, o **`str.join` do
+   Python** dentro de uma f-string que gera código de DAG. Não é join de DataFrame.
+2. `src/gold/fraude.py:46` e `:50` — são os **dois ramos do mesmo `if/else`**
+   (`:45`, broadcast vs sort-merge). É **um** join lógico, contado uma vez.
+
+O revisor rejeita documentação que trate qualquer uma das duas como join de dado,
+e rejeita documentação que descreva a de `fraude.py` como dois joins distintos.
+
+---|---|
 | `src/gold/streaming_gold.py` | 4 |
 | `src/gold/fraude.py` | 2 |
 | `src/gold/correlacao_acoes_cambio.py` | 1 |
@@ -149,13 +174,17 @@ Entregue:
    - agregações e window functions: chave de partição, ordenação, frame
    - filtros e deduplicações, com o efeito sobre o volume
 
-2. SEÇÃO DEDICADA A JOINS — são 8 ocorrências de join de DADO, assim distribuídas:
-   src/gold/streaming_gold.py (4), src/gold/fraude.py (2),
+2. SEÇÃO DEDICADA A JOINS — são 7 joins de DADO, assim distribuídos:
+   src/gold/streaming_gold.py (4), src/gold/fraude.py (1),
    src/gold/correlacao_acoes_cambio.py (1), jobs/job_corretora_analises.py (1).
    Para cada join: tabelas, chave, tipo (inner/left/...), estratégia
    (broadcast?), e cardinalidade esperada.
-   O grep por ".join(" retorna 9 — a nona está em src/pipeline/dynamic_pipeline.py
-   e é montagem de DAG, não dado. Não documente essa como transformação.
+   O grep por ".join(" retorna 9. Dois são falsos positivos e NÃO devem ser
+   documentados como join de dado:
+   - src/pipeline/dynamic_pipeline.py:279 é `", ".join(...)`, str.join do
+     Python gerando código de DAG
+   - src/gold/fraude.py:46 e :50 são os dois ramos do mesmo if/else (:45),
+     broadcast vs sort-merge. Documente como UM join com duas estratégias.
 
 3. LIMIARES E CONSTANTES DE NEGÓCIO em uma tabela própria (valores de corte de
    fraude, faixas de score de risco, thresholds de anomalia, janelas temporais).
@@ -260,10 +289,11 @@ CHECKLIST DE COBERTURA (objetivo, sem margem para julgamento):
 
 [ ] As 30 tabelas do inventário aparecem, cada uma com produtor e consumidor
     identificados por arquivo:linha
-[ ] Os 8 joins de dado estão documentados com chave e tipo (4 em
-    streaming_gold.py, 2 em fraude.py, 1 em correlacao_acoes_cambio.py,
-    1 em job_corretora_analises.py) e o join de dynamic_pipeline.py NÃO
-    aparece como linhagem de dado
+[ ] Os 7 joins de dado estão documentados com chave e tipo (4 em
+    streaming_gold.py, 1 em fraude.py, 1 em correlacao_acoes_cambio.py,
+    1 em job_corretora_analises.py); o `str.join` de dynamic_pipeline.py:279
+    NÃO aparece como linhagem; e o join de fraude.py está descrito como UM
+    join com duas estratégias, não como dois joins
 [ ] Nenhuma tabela/coluna citada na documentação deixa de existir no código
     (verifique por amostragem agressiva — pelo menos 10 nomes, incluindo os
     menos óbvios)

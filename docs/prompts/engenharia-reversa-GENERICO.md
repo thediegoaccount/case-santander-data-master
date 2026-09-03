@@ -25,9 +25,14 @@ e de engenheiro de dados sênior. O revisor diz se está *completo*; o Master di
 *certo e útil*.
 
 > **Armadilha que custa caro:** valide o inventário antes de usá-lo como critério.
-> Grep quase sempre traz falso positivo (código comentado, teste, homônimo). Se o
-> inventário disser "9 joins" e só 8 forem reais, o revisor nunca aprova — loop
-> infinito. A Fase 0 tem um passo dedicado a separar reais de falsos positivos.
+> Contagem inflada por falso positivo torna o checklist do revisor insatisfazível
+> e o loop nunca fecha. Caso real, medido: `grep ".join("` devolveu **9** num
+> projeto; só **7** eram join de dado. Dois falsos positivos, de naturezas
+> diferentes — um era `", ".join(...)`, o `str.join` do Python dentro de um
+> gerador de código; o outro eram os dois ramos de um mesmo `if/else`
+> (broadcast vs sort-merge), que é **um** join lógico contado duas vezes.
+> Nenhum dos dois sai por regex; só olhando o código. Por isso a Fase 0 tem um
+> passo dedicado a separar reais de falsos positivos, nomeando cada exclusão.
 
 ---
 
@@ -98,6 +103,12 @@ Fase 0: Reconhecimento multi-repo ──> INVENTARIO.md (contrato)
 > tabela, coluna, job ou endpoint. Não copie afirmação de README sem checar no código.
 > **Nunca reproduza segredos, credenciais, tokens, connection strings, hostnames
 > internos ou amostras de dado real** — descreva o tipo e a localização, jamais o valor.
+>
+> **Gravação dos artefatos:** use a ferramenta de escrita de arquivo direta
+> (Write/editor), nunca shell com heredoc. Os artefatos deste pacote passam de
+> mil linhas e a escrita via shell estoura timeout — o trabalho inteiro se perde
+> no último passo, depois de já estar pronto. Grave incrementalmente quando o
+> documento for muito grande.
 
 ---
 
