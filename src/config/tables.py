@@ -12,9 +12,15 @@ Uso:
 
     from src.config.tables import SCHEMA_BRONZE, SCHEMA_SILVER, SCHEMA_GOLD
 
-    spark.sql(f"SELECT * FROM {SCHEMA_SILVER}.acoes")
+    spark.sql(f"SELECT * FROM {SCHEMA_SILVER}.<nome_da_tabela>")
 
 Os nomes são resolvidos na importação, a partir de ENVIRONMENT.
+
+Nota: o exemplo acima usa `<nome_da_tabela>` de propósito, nunca um nome real.
+Como todo job importa este módulo, um nome real escrito aqui é contado como
+leitura daquela tabela por qualquer varredura de linhagem, e ela passa a
+aparecer como dependência de praticamente todos os jobs. Mantenha o
+placeholder ao editar este docstring.
 """
 
 from .environment import EnvironmentConfig
