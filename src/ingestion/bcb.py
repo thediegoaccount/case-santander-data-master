@@ -187,5 +187,10 @@ def extrair_bcb(spark, storage_account: str = None) -> int:
         return total
 
     except Exception as e:
+        # A exceção PRECISA subir. Antes este except retornava 0, e o `try`
+        # envolve a própria escrita: falha ao gravar terminava a task como
+        # Succeeded e liberava as sucessoras (t2_silver_bcb, t3_bcb,
+        # t3_acoes_cambio), que processavam a partição do dia anterior como
+        # se fosse a de hoje. Falha de escrita tem que bloquear o pipeline.
         print(f"[{env.upper()}]  Erro ao gravar Bronze: {str(e)}")
-        return 0
+        raise

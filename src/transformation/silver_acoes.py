@@ -63,14 +63,6 @@ def transformar_acoes(spark: SparkSession, storage_account: str) -> int:
         .filter(F.col("volume") > 0) \
         .drop("dividends", "stock_splits")
 
-    df_silver.write \
-        .format("delta") \
-        .mode("overwrite") \
-        .option("mergeSchema", "true") \
-        .partitionBy("ano", "mes") \
-        .save(silver_path)
-    # fmt: on
-
     # Gate de qualidade ANTES de publicar. O framework de 228 linhas em
     # src/quality/data_quality.py nao tinha um unico call site em codigo
     # executavel -- so aparecia em documentacao. Falha aqui aborta o job em
@@ -80,6 +72,14 @@ def transformar_acoes(spark: SparkSession, storage_account: str) -> int:
         "row_count": {"min_rows": 1},
         "nulls": {"max_null_percentage": 0.05},
     })
+
+    df_silver.write \
+        .format("delta") \
+        .mode("overwrite") \
+        .option("mergeSchema", "true") \
+        .partitionBy("ano", "mes") \
+        .save(silver_path)
+    # fmt: on
 
     # Registra o path como tabela externa no Unity Catalog.
     # Os consumidores gold leem via `FROM <catalog>.<env>_silver.acoes`, mas

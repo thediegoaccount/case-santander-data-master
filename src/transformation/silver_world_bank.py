@@ -31,13 +31,6 @@ def transformar_world_bank(spark: SparkSession, storage_account: str) -> int:
         .filter(F.col("valor").isNotNull()) \
         .filter(F.col("ano").isNotNull())
 
-    df_silver.write \
-        .format("delta") \
-        .mode("overwrite") \
-        .option("mergeSchema", "true") \
-        .save(silver_path)
-    # fmt: on
-
     # Gate de qualidade ANTES de publicar. O framework de 228 linhas em
     # src/quality/data_quality.py nao tinha um unico call site em codigo
     # executavel -- so aparecia em documentacao. Falha aqui aborta o job em
@@ -46,6 +39,13 @@ def transformar_world_bank(spark: SparkSession, storage_account: str) -> int:
         "completeness": {"required_columns": ["ano", "indicador", "valor"]},
         "row_count": {"min_rows": 1},
     })
+
+    df_silver.write \
+        .format("delta") \
+        .mode("overwrite") \
+        .option("mergeSchema", "true") \
+        .save(silver_path)
+    # fmt: on
 
     # Registra o path como tabela externa no Unity Catalog.
     # Os consumidores gold leem via `FROM <catalog>.<env>_silver.world_bank`, mas
