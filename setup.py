@@ -25,6 +25,7 @@ setup(
     entry_points={
         "console_scripts": [
             "job_bronze_clientes = jobs.job_bronze_clientes:main",
+            "job_exportar_amostra_streaming = jobs.job_exportar_amostra_streaming:main",
             "job_bronze_ordens = jobs.job_bronze_ordens:main",
             "job_silver_clientes = jobs.job_silver_clientes:main",
             "job_silver_ordens = jobs.job_silver_ordens:main",

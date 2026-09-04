@@ -17,8 +17,16 @@ Configuração:
     export EVENTHUB_CONNECTION_STRING="Endpoint=sb://..."
     export EVENTHUB_NAME="transacoes-financeiras"
 
+    Opcional -- clientes REAIS por transação (senão usa pool sintético
+    "SYN-nnnn", sem vinculo com bronze.clientes; ver scripts/_streaming_clientes.py):
+    export AZURE_CLIENT_ID="..."
+    export AZURE_CLIENT_SECRET="..."
+    export AZURE_TENANT_ID="..."
+    export STORAGE_ACCOUNT="..."
+
 Dependências:
     pip install azure-eventhub python-dotenv
+    pip install azure-identity azure-storage-file-datalake   # so para clientes reais
 """
 import argparse
 import json
@@ -28,6 +36,8 @@ import time
 from datetime import datetime, timedelta
 from azure.eventhub import EventHubProducerClient, EventData
 from dotenv import load_dotenv
+
+from _streaming_clientes import carregar_clientes
 
 # Carregar variáveis de ambiente
 load_dotenv()
@@ -60,15 +70,12 @@ CORRETORAS = [
 # Tipos de transação
 TIPOS = ["compra", "venda"]
 
-# Pool fixo de atores sinteticos do streaming. Formato "SYN-nnnn" de proposito
-# diferente de hash_cliente real (SHA256, 64 chars) -- este producer roda fora
-# do Databricks, sem acesso a bronze.clientes, entao nao ha como atribuir um
-# cliente REAL a cada transacao sem dar ao producer credencial Azure AD e um
-# SQL Warehouse so pra essa amostra. O pool e FIXO (nao um valor novo por
-# transacao) para que o mesmo ator reapareca varias vezes e dê pra perguntar
-# "esse ator teve N alertas hoje" -- mas NUNCA correspondera a um cliente de
-# bronze/silver.clientes: um join contra score_risco_clientes sempre dá NULL.
-CLIENTES_SINTETICOS = [f"SYN-{i:04d}" for i in range(200)]
+# Amostra de hash_cliente para atribuir a cada transacao. Real (de
+# bronze.clientes, exportada por job_exportar_amostra_streaming) se
+# AZURE_CLIENT_ID/AZURE_CLIENT_SECRET/AZURE_TENANT_ID/STORAGE_ACCOUNT
+# estiverem no .env; senao cai num pool sintetico "SYN-nnnn" -- ver
+# scripts/_streaming_clientes.py.
+CLIENTES, FONTE_CLIENTES = carregar_clientes()
 
 
 def gerar_transacao(transacao_id=None):
@@ -89,7 +96,7 @@ def gerar_transacao(transacao_id=None):
     quantidade = random.randint(100, 10000)
     tipo = random.choice(TIPOS)
     corretora = random.choice(CORRETORAS)
-    hash_cliente = random.choice(CLIENTES_SINTETICOS)
+    hash_cliente = random.choice(CLIENTES)
 
     if transacao_id is None:
         transacao_id = f"{ticker}-{int(time.time() * 1000)}-{random.randint(1000, 9999)}"

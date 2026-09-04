@@ -29,6 +29,13 @@ def detectar_fraude_streaming(spark: SparkSession) -> int:
     Score:
       3+ alertas → Critico | 2 → Alto | 1 → Medio | 0 → Normal
 
+    Tambem cruza por hash_cliente com gold.score_risco_clientes: quando o
+    producer tem credencial Azure configurada, hash_cliente vem de uma
+    amostra REAL de bronze.clientes (job_exportar_amostra_streaming) e o
+    join traz o perfil de risco ja conhecido do cliente. Sem credencial, o
+    producer cai num pool sintetico ("SYN-nnnn") que nunca casa -- nesse
+    caso categoria_risco_cliente/score_risco_cliente saem NULL, esperado.
+
     Returns: total de transacoes criticas detectadas
     """
     data_hoje = datetime.now().strftime("%Y-%m-%d")
@@ -47,19 +54,25 @@ def detectar_fraude_streaming(spark: SparkSession) -> int:
 
     # df_perf tem exatamente 9 linhas (9 tickers × 1 ano) — broadcast elimina
     # o sort-merge shuffle distribuindo a tabela inteira em cada executor
-    #
+    df_risco = spark.sql(f"""
+        SELECT hash_cliente, categoria_risco, score_risco
+        FROM {SCHEMA_GOLD}.score_risco_clientes
+    """)
+    # df_risco e uma linha por cliente (10-15k para a base do Kaggle) -- ainda
+    # cabe em broadcast, so nao escale isso para uma base de milhoes sem medir.
+
     # corretora e hash_cliente estao disponiveis em df_stream (SELECT * de
     # silver.streaming, acima) mas ate aqui eram descartados no select final --
     # a tabela identificava a transacao e o ativo, nunca quem operou.
-    # ATENCAO: hash_cliente aqui e sintetico (formato "SYN-nnnn", gerado em
-    # scripts/eventhub_producer*.py), NAO corresponde a nenhum cliente de
-    # bronze/silver.clientes. Nao fazer join com score_risco_clientes
-    # esperando casar -- serve para agrupar por ator dentro do proprio fluxo
-    # de streaming ("esse ator teve N alertas hoje"), nao para identificar um
-    # cliente real do CRM.
+    # LEFT join com score_risco_clientes: quando hash_cliente e sintetico
+    # (producer sem credencial Azure), nao casa e sai NULL -- e o esperado,
+    # nao um erro. Ver docstring da funcao.
     # fmt: off
     df_fraude = df_stream \
         .join(F.broadcast(df_perf), on="ticker", how="left") \
+        .join(F.broadcast(df_risco), on="hash_cliente", how="left") \
+        .withColumnRenamed("categoria_risco", "categoria_risco_cliente") \
+        .withColumnRenamed("score_risco", "score_risco_cliente") \
         .withColumn("alerta_volume_suspeito",
             F.when(F.col("quantidade") > 9000, True).otherwise(False)) \
         .withColumn("alerta_preco_atipico",
@@ -90,6 +103,7 @@ def detectar_fraude_streaming(spark: SparkSession) -> int:
             "id_transacao", "timestamp", "ticker", "tipo",
             "preco", "quantidade", "valor_total",
             "corretora", "hash_cliente",
+            "categoria_risco_cliente", "score_risco_cliente",
             "preco_medio", "volatilidade",
             "alerta_volume_suspeito", "alerta_preco_atipico",
             "alerta_valor_elevado", "alerta_desvio_historico",

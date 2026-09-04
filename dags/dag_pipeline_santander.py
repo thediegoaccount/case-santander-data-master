@@ -80,6 +80,12 @@ with DAG(
         job_path="jobs/job_bronze_clientes.py"
     )
 
+    # Exporta amostra de hash_cliente para o producer de streaming (fora do Databricks) atribuir cliente real as transacoes
+    t6_exportar_amostra_streaming = databricks_task(
+        task_id="t6_exportar_amostra_streaming",
+        job_path="jobs/job_exportar_amostra_streaming.py"
+    )
+
     # Bronze Ordens simuladas - carga isolada de bronze.ordens
     t6_bronze_ordens = databricks_task(
         task_id="t6_bronze_ordens",
@@ -187,6 +193,7 @@ with DAG(
     [t0_unity_catalog] >> t1_extracao_bcb
     [t0_unity_catalog] >> t1_extracao_world_bank
     [t0_unity_catalog] >> t6_bronze_clientes
+    [t6_bronze_clientes] >> t6_exportar_amostra_streaming
     [t6_bronze_clientes] >> t6_bronze_ordens
     [t6_bronze_clientes] >> t6_silver_clientes
     [t6_bronze_ordens] >> t6_silver_ordens

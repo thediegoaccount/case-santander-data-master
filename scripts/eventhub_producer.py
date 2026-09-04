@@ -7,12 +7,22 @@ Uso:
 
 Dependências:
     pip install azure-eventhub
+
+Cliente por transação (opcional):
+    Sem configuração extra, cada transação recebe um hash_cliente SINTETICO
+    ("SYN-nnnn"), sem vinculo com bronze.clientes. Para usar clientes REAIS
+    (exportados por job_exportar_amostra_streaming), instale
+    "pip install azure-identity azure-storage-file-datalake" e exporte:
+        AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID, STORAGE_ACCOUNT
+    Ver scripts/_streaming_clientes.py.
 """
 import json
 import random
 import time
 from datetime import datetime, timedelta
 from azure.eventhub import EventHubProducerClient, EventData
+
+from _streaming_clientes import carregar_clientes
 
 # Seed fixa: torna a sequência de transações geradas (ticker, preço, tipo, corretora,
 # intervalo de envio) reproduzível entre execuções. Não fixa o TOTAL de eventos — isso
@@ -42,15 +52,12 @@ CORRETORAS = [
 # Tipos de transação
 TIPOS = ["compra", "venda"]
 
-# Pool fixo de atores sinteticos do streaming. Formato "SYN-nnnn" de proposito
-# diferente de hash_cliente real (SHA256, 64 chars) -- este producer roda fora
-# do Databricks, sem acesso a bronze.clientes, entao nao ha como atribuir um
-# cliente REAL a cada transacao sem dar ao producer credencial Azure AD e um
-# SQL Warehouse so pra essa amostra. O pool e FIXO (nao um valor novo por
-# transacao) para que o mesmo ator reapareca varias vezes e dê pra perguntar
-# "esse ator teve N alertas hoje" -- mas NUNCA correspondera a um cliente de
-# bronze/silver.clientes: um join contra score_risco_clientes sempre dá NULL.
-CLIENTES_SINTETICOS = [f"SYN-{i:04d}" for i in range(200)]
+# Amostra de hash_cliente para atribuir a cada transacao. Real (de
+# bronze.clientes, exportada por job_exportar_amostra_streaming) se
+# AZURE_CLIENT_ID/AZURE_CLIENT_SECRET/AZURE_TENANT_ID/STORAGE_ACCOUNT
+# estiverem no ambiente; senao cai num pool sintetico "SYN-nnnn" -- ver
+# scripts/_streaming_clientes.py.
+CLIENTES, FONTE_CLIENTES = carregar_clientes()
 
 
 def gerar_transacao():
@@ -70,7 +77,7 @@ def gerar_transacao():
     quantidade = random.randint(100, 10000)
     tipo = random.choice(TIPOS)
     corretora = random.choice(CORRETORAS)
-    hash_cliente = random.choice(CLIENTES_SINTETICOS)
+    hash_cliente = random.choice(CLIENTES)
 
     transacao = {
         "timestamp": datetime.now().isoformat(),

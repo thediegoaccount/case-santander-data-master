@@ -417,6 +417,27 @@ resources:
         timeout_seconds: 3600
         max_retries: 2
 
+      - task_key: t6_exportar_amostra_streaming
+        description: "Exporta amostra de hash_cliente para o producer de streaming (fora do Databricks) atribuir cliente real as transacoes"
+        depends_on:
+          - task_key: t6_bronze_clientes
+        python_wheel_task:
+          package_name: case_santander
+          entry_point: job_exportar_amostra_streaming
+        libraries:
+          - whl: ./dist/*.whl
+        new_cluster:
+          spark_env_vars:
+            ENVIRONMENT: "${var.environment}"
+          spark_version: ${var.spark_version}
+          node_type_id: "Standard_DS3_v2"
+          num_workers: ${var.gold_workers}
+          azure_attributes:
+            availability: "SPOT_WITH_FALLBACK_AZURE"
+            first_on_demand: 1
+        timeout_seconds: 1800
+        max_retries: 2
+
       #  SILVER (Por Fonte) 
       - task_key: t6_bronze_ordens
         description: "Bronze Ordens simuladas - carga isolada de bronze.ordens"
