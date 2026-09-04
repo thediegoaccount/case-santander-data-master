@@ -109,7 +109,11 @@ cd terraform/bootstrap && terraform init && terraform apply
 
 ```bash
 cd terraform
-terraform init
+# O -backend-config e OBRIGATORIO: o `key` do bloco backend em main.tf
+# e fixo, entao um `terraform init` puro faz hk e prod compartilharem o
+# mesmo state -- aplicar um planeja destruir o outro. Use a chave do
+# ambiente alvo (case-santander-data-prod.tfstate para prod).
+terraform init -backend-config="key=case-santander-data-hk.tfstate"
 terraform validate
 terraform apply -var-file=environments/hk.tfvars \
   -target=module.resource_group \

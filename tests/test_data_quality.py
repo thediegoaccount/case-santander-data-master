@@ -22,12 +22,17 @@ TB_GOLD_FRAUDE = f"{SCHEMA_GOLD}.deteccao_fraude"
 
 def test_bronze_clientes_completeness(spark_session):
     """Testa se bronze.clientes tem todas as colunas obrigatórias"""
+    # Alinhado ao que src/ingestion/clientes_kaggle.py realmente produz.
+    # Antes exigia "nome" e "score_risco": o primeiro NAO e gravado de
+    # proposito (e PII em claro; o desenho so persiste sobrenome_masked
+    # hasheado), e o segundo nao existe -- a coluna e "score_credito".
+    # Como o teste so pulava quando a tabela NAO existe, ele falharia em
+    # qualquer ambiente onde ela exista.
     expected_columns = [
         "id_cliente",
         "hash_cliente",
-        "nome",
         "sobrenome_masked",
-        "score_risco",
+        "score_credito",
         "saldo",
         "ativo",
     ]
@@ -84,9 +89,8 @@ def test_schema_drift_detection(spark_session):
     expected_schema = {
         "id_cliente": "string",
         "hash_cliente": "string",
-        "nome": "string",
         "sobrenome_masked": "string",
-        "score_risco": "integer",
+        "score_credito": "long",
         "saldo": "double",
         "ativo": "boolean",
     }

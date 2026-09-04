@@ -1594,7 +1594,7 @@ descrever um modelo que o pipeline não implementa.
 | | Faixas | Onde |
 |---|---|---|
 | **Implementado** | `>=70` Baixo Risco → **R$500.000**; `>=50` Risco Moderado → **R$200.000**; `>=30` Risco Alto → **R$50.000**; **else Risco Critico → R$10.000** | `jobs/job_corretora_analises.py:104-113` |
-| **Documentado** | `70–100` Baixo Risco → R$500.000; **`40–70`** Risco Moderado → R$200.000; **`0–40`** "Alto Risco" → R$50.000 | `notebooks/case_presentation.py:597-600` |
+| **Documentado** | `70–100` Baixo Risco → R$500.000; **`40–70`** Risco Moderado → R$200.000; **`0–40`** "Alto Risco" → R$50.000 | `notebooks/case_presentation.py:598-600` |
 
 Três divergências simultâneas: **(a)** o corte de Risco Moderado é **50** no
 código e **40** na documentação — um cliente com score 45 é "Risco Alto"
@@ -1610,7 +1610,7 @@ consulta retorna zero linhas sempre**, porque o valor gravado é `"Risco Alto"`.
 | Fonte | Tickers | Onde |
 |---|---|---|
 | Extração Yahoo / simulação de ordens | `PETR4, VALE3, ITUB4, BBDC4, ABEV3, MGLU3, WEGE3, BBAS3, SANB11` (9) | `src/config/settings.py:2-12`; `src/ingestion/ordens_simuladas.py:25-28`; mapa `empresa`/`setor` em `src/transformation/silver_acoes.py:43-60` |
-| Producers de streaming | `PETR4, VALE3, ITUB4, BBDC4, BBAS3, WEGE3, **RENT3**, MGLU3, **B3SA3**, **HAPV3**` (10) | `scripts/eventhub_producer.py:26-29`; `scripts/eventhub_producer_advanced.py:45-48` |
+| Producers de streaming | `PETR4, VALE3, ITUB4, BBDC4, BBAS3, WEGE3, **RENT3**, MGLU3, **B3SA3**, **HAPV3**` (10) | `scripts/eventhub_producer.py:27-30`; `scripts/eventhub_producer_advanced.py:45-48` |
 
 **Duas listas diferentes.** `ABEV3` e `SANB11` estão no pipeline e não nos
 producers; `RENT3`, `B3SA3` e `HAPV3` estão nos producers e **não** no
@@ -2100,8 +2100,9 @@ achados 10.3 e 10.4 passam de teóricos a efetivos.
   `kaggle-username`, `kaggle-key`, `salt` (`:40-73`).
 - ⚠️ `scripts/eventhub_producer.py:23` contém um **placeholder** de connection
   string (`"YOUR_EVENT_HUB_..."`), não um valor real; a versão avançada lê da
-  variável de ambiente (`producer_advanced.py:21`). Registrado como
-  observação de higiene, não como vazamento.
+  variável de ambiente `EVENTHUB_CONNECTION_STRING`
+  (`scripts/eventhub_producer_advanced.py:41`). Registrado como observação de
+  higiene, não como vazamento.
 - ⚠️ `src/config/environment.py:26-35` traz um caminho de Workspace default que
   embute o **e-mail do autor** — dado pessoal em código-fonte, ainda que de
   baixo risco.

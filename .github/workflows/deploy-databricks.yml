@@ -5,6 +5,10 @@ on:
     branches:
       - main
       - develop
+    # O job deploy-prod e disparado por tag de release (v*). Sem este
+    # gatilho, a condicao dele nunca poderia ser satisfeita.
+    tags:
+      - 'v*'
     paths:
       - 'jobs/**'
       - 'src/**'
@@ -134,7 +138,12 @@ jobs:
     name: Deploy to Production
     needs: validate
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && startsWith(github.ref, 'refs/tags/v')
+    # Antes: github.ref == 'refs/heads/main' && startsWith(github.ref, 'refs/tags/v').
+    # github.ref nao pode ser um branch E uma tag ao mesmo tempo -- a
+    # condicao era logicamente impossivel e este job NUNCA executou.
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'prod')
     environment:
       name: production
       url: https://prod.cloud.databricks.com

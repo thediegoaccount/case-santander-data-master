@@ -59,6 +59,10 @@ cmd_stage1() {
 cmd_stage2() {
   log "Etapa 2: recursos dentro do Databricks"
   cd "$TF_DIR"
+  # init tambem aqui: sem ele, rodar stage2 num checkout limpo falha por
+  # falta de init, e num diretorio ja inicializado usa o backend que
+  # sobrou -- possivelmente o state do OUTRO ambiente.
+  terraform init -backend-config="key=$BACKEND_KEY"
   terraform apply "$@"
   log "Nomes efetivos (devem bater com src/config/environment.py):"
   terraform output resource_names
