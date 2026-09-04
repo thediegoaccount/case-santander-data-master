@@ -27,7 +27,11 @@ def extrair_bcb(spark, storage_account: str = None) -> int:
 
     data_hoje = datetime.now().strftime("%Y-%m-%d")
     data_inicial = "01/04/2021"
-    data_final = "01/04/2026"
+    # Antes era uma data fixa ("01/04/2026") que ja tinha ficado no passado
+    # -- toda execucao buscava uma janela terminando naquele dia, entao
+    # dados de meses depois nunca entravam, sem erro nenhum. Agora
+    # acompanha a data real de execucao.
+    data_final = datetime.now().strftime("%d/%m/%Y")
 
     print(f"[{env.upper()}] Extraindo dados BCB...")
     print(f"[{env.upper()}] Storage Account: {storage_account}")
