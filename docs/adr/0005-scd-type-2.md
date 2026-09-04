@@ -55,6 +55,29 @@ intervalo — consultas por data usam `BETWEEN` sem tratamento especial.
 - Toda carga é um `MERGE`, mais caro que um `overwrite`
 - A granularidade é diária: duas mudanças no mesmo dia colapsam em uma
 
+## Mudança de regra de cálculo
+
+Quando a fórmula de `score_risco` muda (em `job_corretora_analises.py`, que alimenta
+`aplicar_scd_type2` em [`src/clients/scd.py`](../../src/clients/scd.py)), o comportamento é
+**deliberadamente não-retroativo**:
+
+- A partir da próxima execução, a linha vigente (`atual = true`) passa a refletir a regra nova
+- As linhas já fechadas (`atual = false`) mantêm o valor calculado pela regra que estava em
+  vigor **naquela data** — não são recalculadas
+
+Isso é consequência direta da decisão acima, não um efeito colateral: um registro histórico de
+SCD2 responde *"o que acreditávamos ser verdade nesta data?"*, e mudar essa resposta
+retroativamente porque a fórmula mudou depois destruiria exatamente a trilha de auditoria que
+motivou o padrão (ver "Positivas"). Reescrever o passado a cada ajuste de fórmula equivale a
+não ter SCD nenhum.
+
+Não existe hoje um caminho para recomputar o histórico inteiro sob a regra nova — foi avaliado
+e descartado deliberadamente (2026-09), preferindo manter a garantia acima a construir esse
+mecanismo. Se essa necessidade surgir, é uma operação distinta e explícita — apagar e
+reconstruir a série SCD do zero — que deve ficar fora do fluxo normal do pipeline e nunca ser
+disparada implicitamente por um `job_scd` comum, sob risco de apagar histórico de mudança real
+de perfil de cliente junto com a mudança de fórmula.
+
 ## Alternativas consideradas
 
 **SCD Type 1 (sobrescrever)** — descartada. Mais barato e simples, mas elimina exatamente a

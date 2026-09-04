@@ -12,6 +12,14 @@ from src.config.tables import SCHEMA_GOLD, SCHEMA_SILVER
 def aplicar_scd_type2(spark: SparkSession, df_novos, tabela_uc: str, chave: str) -> None:
     """
     Aplica SCD Type 2 em uma tabela Delta Lake via Unity Catalog.
+
+    Se a regra de cálculo de df_novos mudar (ex.: fórmula de score_risco em
+    job_corretora_analises.py) e esta função rodar de novo, só a versão
+    vigente (atual=true) passa a refletir a regra nova. Linhas já fechadas
+    mantêm o valor calculado pela regra em vigor naquela data -- de
+    propósito, não é bug. Rever docs/adr/0005-scd-type-2.md antes de
+    "corrigir" isso: reescrever o passado a cada mudança de fórmula destrói
+    a trilha de auditoria que é a razão de existir do SCD Type 2.
     """
     from delta.tables import DeltaTable
 
