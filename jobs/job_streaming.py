@@ -79,6 +79,14 @@ def main():
         F.from_json(F.col("Body").cast("string"), schema_transacao).alias("t")
     ).select("t.*")
 
+    # processado_em usa F.current_timestamp() (nativo do Spark), nao
+    # F.lit(datetime.now().isoformat()). O antigo era Python puro, avaliado
+    # UMA VEZ quando o plano de streaming e montado, nao por micro-lote.
+    # Auto Loader com trigger(availableNow=True) pode processar varios lotes
+    # internos numa unica execucao se houver backlog -- todos sairiam com o
+    # mesmo processado_em, o instante em que o job comecou.
+    # Mantido como string (nao timestamp nativo) para nao quebrar
+    # mergeSchema numa tabela ja existente com essa coluna como string.
     df_processado = df_stream \
         .withColumn("timestamp",   F.to_timestamp("timestamp")) \
         .withColumn("hora",        F.hour("timestamp")) \
@@ -92,7 +100,7 @@ def main():
             F.when(F.col("preco") > 80, "Preco Alto")
             .when(F.col("preco") < 15, "Preco Baixo")
             .otherwise("Normal")) \
-        .withColumn("processado_em", F.lit(datetime.now().isoformat()))
+        .withColumn("processado_em", F.current_timestamp().cast("string"))
 
     # NAO limpar o destino: job_streaming_continuous escreve no MESMO
     # silver/streaming/ com um checkpoint proprio. O `dbutils.fs.rm` que
