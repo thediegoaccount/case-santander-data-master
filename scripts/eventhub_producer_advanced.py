@@ -42,9 +42,14 @@ EVENT_HUB_CONNECTION_STR = os.getenv("EVENTHUB_CONNECTION_STRING")
 EVENT_HUB_NAME = os.getenv("EVENTHUB_NAME", "transacoes-financeiras")
 
 # Tickers disponíveis
+# Precisa bater com src/config/settings.py ACOES: e o universo que
+# silver_acoes/performance_acoes conhecem. RENT3, B3SA3 e HAPV3 nao existem
+# la -- os 4 joins left de src/gold/streaming_gold.py caem no "otherwise"
+# para esses tickers, tornando 3 dos 10 ativos invisiveis a alerta de
+# anomalia, desvio historico e volume no fluxo de streaming.
 TICKERS = [
-    "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "BBAS3.SA",
-    "WEGE3.SA", "RENT3.SA", "MGLU3.SA", "B3SA3.SA", "HAPV3.SA"
+    "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "ABEV3.SA",
+    "MGLU3.SA", "WEGE3.SA", "BBAS3.SA", "SANB11.SA"
 ]
 
 # Corretoras
@@ -63,8 +68,8 @@ def gerar_transacao(transacao_id=None):
     # Preço base por ticker (simulado)
     precos_base = {
         "PETR4.SA": 35.0, "VALE3.SA": 65.0, "ITUB4.SA": 32.0,
-        "BBDC4.SA": 45.0, "BBAS3.SA": 28.0, "WEGE3.SA": 180.0,
-        "RENT3.SA": 55.0, "MGLU3.SA": 2.5, "B3SA3.SA": 12.0, "HAPV3.SA": 15.0
+        "BBDC4.SA": 45.0, "ABEV3.SA": 12.5, "MGLU3.SA": 2.5,
+        "WEGE3.SA": 180.0, "BBAS3.SA": 28.0, "SANB11.SA": 30.0
     }
     
     preco_base = precos_base.get(ticker, 50.0)

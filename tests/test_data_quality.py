@@ -29,7 +29,6 @@ def test_bronze_clientes_completeness(spark_session):
     # Como o teste so pulava quando a tabela NAO existe, ele falharia em
     # qualquer ambiente onde ela exista.
     expected_columns = [
-        "id_cliente",
         "hash_cliente",
         "sobrenome_masked",
         "score_credito",
@@ -59,7 +58,9 @@ def test_silver_clientes_no_nulls(spark_session):
     total = df.count()
     assert total > 0, f"{TB_SILVER_CLIENTES} está vazia"
 
-    critical_columns = ["id_cliente", "hash_cliente", "nome"]
+    # "nome" e "id_cliente" nao existem: o primeiro nunca foi gravado (PII),
+    # o segundo foi removido por carregar o CustomerId em claro.
+    critical_columns = ["hash_cliente", "sobrenome_masked"]
     violacoes = []
     for col in critical_columns:
         nulos = df.filter(F.col(col).isNull()).count()
@@ -87,7 +88,6 @@ def test_gold_fraude_not_empty(spark_session):
 def test_schema_drift_detection(spark_session):
     """Testa se o schema de bronze.clientes não mudou inesperadamente"""
     expected_schema = {
-        "id_cliente": "string",
         "hash_cliente": "string",
         "sobrenome_masked": "string",
         "score_credito": "long",

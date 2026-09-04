@@ -73,7 +73,7 @@ def aplicar_scd_clientes(spark: SparkSession, storage_account: str = None) -> in
 
     df_clientes = spark.sql(f"""
         SELECT
-            id_cliente, hash_cliente, sobrenome_masked,
+            hash_cliente, sobrenome_masked,
             perfil_risco, score_credito, faixa_saldo,
             faixa_etaria, score_categoria, ativo, churn
         FROM {SCHEMA_SILVER}.clientes

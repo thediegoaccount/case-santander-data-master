@@ -587,18 +587,25 @@ Propriedades:
 
 # COMMAND ----------
 # MAGIC %md
-# MAGIC **Fórmula de score ponderado:**
+# MAGIC **Fórmula de score ponderado** (jobs/job_corretora_analises.py):
 # MAGIC ```
-# MAGIC score_risco = score_credito   × 0.40   (40% — capacidade de pagamento histórica)
-# MAGIC            + score_atividade  × 0.20   (20% — frequência de uso da plataforma)
-# MAGIC            + score_diversif   × 0.20   (20% — diversificação de carteira)
-# MAGIC            + score_comportam  × 0.20   (20% — padrão de comportamento histórico)
+# MAGIC score_risco = score_credito_norm  × 0.40   (score de crédito 0-850 normalizado para 0-100)
+# MAGIC            + score_perfil         × 0.20   (Arrojado=100, Moderado=60, Conservador=30)
+# MAGIC            + score_saldo          × 0.20   (Alto=100, Medio=60, Baixo=30, sem saldo=10)
+# MAGIC            + score_comportamento  × 0.20   (taxa de cancelamento: <20%=100, <50%=60, senão=20)
 # MAGIC
 # MAGIC Score → Categoria → Limite Operacional
-# MAGIC   0–40   → Alto Risco      → R$  50.000
-# MAGIC  40–70   → Risco Moderado  → R$ 200.000
+# MAGIC   0–30   → Risco Critico   → R$  10.000
+# MAGIC  30–50   → Risco Alto      → R$  50.000
+# MAGIC  50–70   → Risco Moderado  → R$ 200.000
 # MAGIC  70–100  → Baixo Risco     → R$ 500.000
 # MAGIC ```
+# MAGIC
+# MAGIC A versão anterior desta célula documentava componentes que não existem no
+# MAGIC código (`score_atividade`, `score_diversif`) e uma escada de 3 faixas com
+# MAGIC limiares errados — o código tem 4 faixas (a 4ª, `Risco Critico`, não
+# MAGIC estava documentada). O nome das categorias também não é uniforme no
+# MAGIC código: `Baixo Risco` mas `Risco Moderado`/`Risco Alto`/`Risco Critico`.
 
 # COMMAND ----------
 
@@ -631,7 +638,7 @@ Propriedades:
 # MAGIC     c.ativo
 # MAGIC FROM ${schema_gold}.score_risco_clientes s
 # MAGIC JOIN ${schema_silver}.clientes c ON s.hash_cliente = c.hash_cliente
-# MAGIC WHERE s.categoria_risco = 'Alto Risco'
+# MAGIC WHERE s.categoria_risco = 'Risco Alto'  -- valor real gravado pelo job; a query antiga usava 'Alto Risco' e nunca retornava linha
 # MAGIC   AND c.ativo = true
 # MAGIC ORDER BY s.score_risco ASC
 # MAGIC LIMIT 10;

@@ -79,7 +79,12 @@ def extrair_clientes(spark) -> int:
     # fmt: off
     # CustomerId e Surname sao PII: viram hash SHA256 com salt do Key Vault,
     # one-way, nao reversivel nem com acesso ao salt.
-    df["id_cliente"] = df["CustomerId"].apply(lambda x: f"CLI{x}")
+    # NAO gravar o CustomerId em claro. Havia um id_cliente = "CLI"+CustomerId
+    # na linha anterior a esta, ou seja: o identificador cru viajava na coluna
+    # ao lado do proprio hash, em toda tabela derivada ate a SCD. Bastava ler
+    # a coluna vizinha para reverter o hash de qualquer cliente -- a
+    # anonimizacao existia no papel e nao no dado. hash_cliente e a unica
+    # identidade persistida, e e a chave de todos os joins e MERGEs do projeto.
     df["hash_cliente"] = df["CustomerId"].apply(lambda v: hash_customer_id(str(v)))
     df["sobrenome_masked"] = df["Surname"].apply(lambda v: hash_surname(str(v)))
     df["perfil_risco"] = df["CreditScore"].apply(classificar_perfil)
@@ -89,7 +94,7 @@ def extrair_clientes(spark) -> int:
     df["data_extracao"] = data_hoje
 
     df_final = df[[
-        "id_cliente", "hash_cliente", "sobrenome_masked",
+        "hash_cliente", "sobrenome_masked",
         "CreditScore", "Geography", "Gender", "Age", "Tenure",
         "Balance", "faixa_saldo", "NumOfProducts", "perfil_risco",
         "ativo", "churn", "EstimatedSalary", "data_extracao"
