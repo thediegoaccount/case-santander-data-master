@@ -66,6 +66,7 @@ def main():
         StructField("quantidade",   LongType(),    True),
         StructField("tipo",         StringType(),  True),
         StructField("corretora",    StringType(),  True),
+        StructField("hash_cliente", StringType(),  True),
         StructField("id_transacao", StringType(),  True)
     ])
 

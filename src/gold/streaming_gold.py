@@ -47,6 +47,16 @@ def detectar_fraude_streaming(spark: SparkSession) -> int:
 
     # df_perf tem exatamente 9 linhas (9 tickers × 1 ano) — broadcast elimina
     # o sort-merge shuffle distribuindo a tabela inteira em cada executor
+    #
+    # corretora e hash_cliente estao disponiveis em df_stream (SELECT * de
+    # silver.streaming, acima) mas ate aqui eram descartados no select final --
+    # a tabela identificava a transacao e o ativo, nunca quem operou.
+    # ATENCAO: hash_cliente aqui e sintetico (formato "SYN-nnnn", gerado em
+    # scripts/eventhub_producer*.py), NAO corresponde a nenhum cliente de
+    # bronze/silver.clientes. Nao fazer join com score_risco_clientes
+    # esperando casar -- serve para agrupar por ator dentro do proprio fluxo
+    # de streaming ("esse ator teve N alertas hoje"), nao para identificar um
+    # cliente real do CRM.
     # fmt: off
     df_fraude = df_stream \
         .join(F.broadcast(df_perf), on="ticker", how="left") \
@@ -79,6 +89,7 @@ def detectar_fraude_streaming(spark: SparkSession) -> int:
         .select(
             "id_transacao", "timestamp", "ticker", "tipo",
             "preco", "quantidade", "valor_total",
+            "corretora", "hash_cliente",
             "preco_medio", "volatilidade",
             "alerta_volume_suspeito", "alerta_preco_atipico",
             "alerta_valor_elevado", "alerta_desvio_historico",

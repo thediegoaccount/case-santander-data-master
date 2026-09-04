@@ -60,6 +60,16 @@ CORRETORAS = [
 # Tipos de transação
 TIPOS = ["compra", "venda"]
 
+# Pool fixo de atores sinteticos do streaming. Formato "SYN-nnnn" de proposito
+# diferente de hash_cliente real (SHA256, 64 chars) -- este producer roda fora
+# do Databricks, sem acesso a bronze.clientes, entao nao ha como atribuir um
+# cliente REAL a cada transacao sem dar ao producer credencial Azure AD e um
+# SQL Warehouse so pra essa amostra. O pool e FIXO (nao um valor novo por
+# transacao) para que o mesmo ator reapareca varias vezes e dê pra perguntar
+# "esse ator teve N alertas hoje" -- mas NUNCA correspondera a um cliente de
+# bronze/silver.clientes: um join contra score_risco_clientes sempre dá NULL.
+CLIENTES_SINTETICOS = [f"SYN-{i:04d}" for i in range(200)]
+
 
 def gerar_transacao(transacao_id=None):
     """Gera uma transação financeira simulada"""
@@ -79,10 +89,11 @@ def gerar_transacao(transacao_id=None):
     quantidade = random.randint(100, 10000)
     tipo = random.choice(TIPOS)
     corretora = random.choice(CORRETORAS)
-    
+    hash_cliente = random.choice(CLIENTES_SINTETICOS)
+
     if transacao_id is None:
         transacao_id = f"{ticker}-{int(time.time() * 1000)}-{random.randint(1000, 9999)}"
-    
+
     transacao = {
         "timestamp": datetime.now().isoformat(),
         "ticker": ticker,
@@ -90,6 +101,7 @@ def gerar_transacao(transacao_id=None):
         "quantidade": quantidade,
         "tipo": tipo,
         "corretora": corretora,
+        "hash_cliente": hash_cliente,
         "id_transacao": transacao_id
     }
     
@@ -99,8 +111,8 @@ def gerar_transacao(transacao_id=None):
 def validar_schema(transacao):
     """Valida se a transação tem o schema correto"""
     campos_obrigatorios = [
-        "timestamp", "ticker", "preco", "quantidade", 
-        "tipo", "corretora", "id_transacao"
+        "timestamp", "ticker", "preco", "quantidade",
+        "tipo", "corretora", "hash_cliente", "id_transacao"
     ]
     
     for campo in campos_obrigatorios:
