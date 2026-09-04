@@ -3,6 +3,9 @@ name: CI/CD Pipeline - Case Santander Data
 on:
   push:
     branches: [main, develop]
+    # Tag de release e o gatilho do DEPLOY de prod (Databricks e Terraform).
+    # Push simples em main so valida/planeja -- nunca aplica em producao.
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -131,6 +134,13 @@ jobs:
           databricks bundle validate -t prod
       
       - name: Deploy to PROD
+        # Antes rodava em TODO push para main, sem gate nenhum -- havia
+        # tambem um job "Deploy to Production" separado (deploy-databricks.yml)
+        # com condicao logicamente impossivel que por isso NUNCA executava.
+        # O caminho seguro estava morto e este, automatico, vivo. Agora o
+        # deploy de verdade so roda em tag de release ou disparo manual;
+        # todo push a main so valida o bundle (step anterior).
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST_PROD }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_PROD }}
@@ -247,6 +257,10 @@ jobs:
           terraform plan -var-file=environments/prod.tfvars -out=tfplan
       
       - name: Terraform Apply (PROD)
+        # O plan acima roda em todo push a main (e so leitura). O apply, que
+        # muda infraestrutura de producao de verdade, exige tag de release
+        # ou disparo manual -- mesmo motivo do deploy do Databricks acima.
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         run: |
           cd terraform
           terraform apply tfplan

@@ -24,6 +24,16 @@ variables:
     description: "Habilita processamento de streaming"
     default: false
 
+  notification_emails:
+    description: >-
+      Lista de e-mails avisados quando pipeline_completo falha. Vazia por
+      padrao -- zero notificacao ate ser configurada (sobrescreva via
+      -var ou nos .tfvars de ambiente). Antes nenhum job do bundle tinha
+      email_notifications/webhook_notifications: uma task falhando as
+      3h so era percebida quando alguem checava manualmente.
+    type: complex
+    default: []
+
 # Sem este bloco nenhum wheel era construido, e as tasks python_wheel_task
 # falhavam com ModuleNotFoundError: case_santander.
 artifacts:
@@ -291,6 +301,15 @@ resources:
         team: data-engineering
         layer: orchestration
         type: master-workflow
+
+      # Alerta apenas o essencial: inicio nao interessa, so falha e o
+      # sinal de vida do run completo. on_success de um workflow diario
+      # viraria ruido rapido. Estenda o mesmo padrao aos outros jobs deste
+      # arquivo (streaming_continuous, streaming_to_gold_continuous e os
+      # t3_gold_* avulsos) conforme notification_emails for preenchida.
+      email_notifications:
+        on_failure: ${var.notification_emails}
+        no_alert_for_skipped_runs: true
 
       tasks:
       #  SETUP
