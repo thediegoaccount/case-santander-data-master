@@ -15,6 +15,16 @@ output "storage_account_dfs_endpoint" {
   value       = module.storage_account.primary_dfs_endpoint
 }
 
+output "storage_account_secondary_dfs_endpoint" {
+  description = "Endpoint de LEITURA na regiao secundaria (RA-GRS), para usar numa indisponibilidade da regiao primaria"
+  value       = module.storage_account.secondary_dfs_endpoint
+}
+
+output "storage_account_secondary_location" {
+  description = "Regiao secundaria pareada pelo Azure para a replicacao"
+  value       = module.storage_account.secondary_location
+}
+
 output "key_vault_name" {
   description = "Key Vault name"
   value       = module.key_vault.key_vault_name

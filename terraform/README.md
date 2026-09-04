@@ -262,6 +262,40 @@ backend "azurerm" {
 }
 ```
 
+## Continuidade em indisponibilidade regional
+
+O storage account principal e o do backend do state (`bootstrap/`) usam
+**RA-GRS**: cópia geo-replicada assíncrona numa região secundária pareada
+pela própria Azure, com **leitura da secundária disponível de imediato** —
+não é preciso esperar um failover manual para começar a ler.
+
+```bash
+terraform output storage_account_secondary_dfs_endpoint
+terraform output storage_account_secondary_location
+```
+
+**O que isso cobre:** perda de acesso ao dado do lakehouse e ao state do
+Terraform durante uma indisponibilidade da região primária (`eastus2`).
+RPO típico de até 15 minutos (Geo Priority Replication) — não é zero;
+escrita muito recente pode não ter chegado na secundária se a região cair
+no meio do caminho.
+
+**O que isso NÃO cobre** — continuam com ponto único de falha:
+
+- **Unity Catalog metastore**: um por região/conta (limite do Azure), sem
+  equivalente na secundária. Ver "Unity Catalog: um metastore por região"
+  acima.
+- **Databricks workspace e cluster de execução**: só existem na região
+  primária. RA-GRS te dá o *dado*, não um lugar para *processar* esse
+  dado durante a queda.
+- **Key Vault**: sem configuração de geo-redundância equivalente exposta
+  pelo Terraform para este recurso.
+
+Ou seja: RA-GRS reduz o risco de **perda/inacessibilidade de dado**, mas
+não entrega pipeline funcionando numa região nova sozinho — isso exigiria
+workspace, metastore e RBAC replicados na secundária (fora do escopo
+deste módulo; decisão de custo/complexidade em aberto).
+
 ## CI/CD
 
 ### GitHub Actions

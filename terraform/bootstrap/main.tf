@@ -28,11 +28,16 @@ resource "azurerm_resource_group" "tfstate" {
 }
 
 resource "azurerm_storage_account" "tfstate" {
-  name                     = var.storage_account_name
-  resource_group_name      = azurerm_resource_group.tfstate.name
-  location                 = azurerm_resource_group.tfstate.location
-  account_tier             = "Standard"
-  account_replication_type = "LRS"
+  name                = var.storage_account_name
+  resource_group_name = azurerm_resource_group.tfstate.name
+  location            = azurerm_resource_group.tfstate.location
+  account_tier        = "Standard"
+  # Mesmo motivo do storage_account principal: numa indisponibilidade da
+  # regiao primaria, LRS deixaria o proprio state do Terraform
+  # inacessivel -- sem conseguir nem gerenciar/reconstruir a infra
+  # enquanto durar. RA-GRS da leitura da copia geo-replicada sem esperar
+  # failover.
+  account_replication_type = "RAGRS"
 
   # State contem secrets: sem acesso publico e com versionamento para
   # permitir recuperar um state corrompido.
